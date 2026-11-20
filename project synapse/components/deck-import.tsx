@@ -40,7 +40,7 @@ function convertGroqToDeck(name: string, concepts: GroqConcept[]): Deck {
         id: `${name}:${i}`,
         title: c.title,
         summary: c.summary,
-        retention: [82, 66, 94, 72, 58, 88][i % 6],
+        retention: 0,
         reviewDay: 0,
         lastReviewed: null,
         needsReview: false,

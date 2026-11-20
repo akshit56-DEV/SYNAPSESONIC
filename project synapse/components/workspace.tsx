@@ -224,16 +224,6 @@ export default function Workspace() {
         )}
       </div>
 
-      <footer className="statusbar flex items-center justify-between">
-        <span className="flex items-center gap-2">
-          <i className="dot" />
-          {isGestureMode ? "AR Spatial Mode Active" : isLearnMode ? "Spatial Tutor Active" : "System operational"}
-        </span>
-        <span>
-          SYNAPSESONIC <b>/</b> ENGINE V1.0
-        </span>
-      </footer>
-
       {importing && (
         <DeckImport load={r.load} close={() => setImporting(false)} />
       )}

@@ -1,58 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import dynamic from "next/dynamic";
-import {
-  Volume2,
-  VolumeX,
-  Mic,
-  MicOff,
-  Sparkles,
-  Lightbulb,
-  Brain,
-  Loader2,
-  Keyboard,
-  Send,
-  X,
-  History,
-  MessageSquare,
-  Sparkle,
-  Radio,
-  Sliders,
-  Compass,
-} from "lucide-react";
 import type { Recall } from "./use-recall";
 
-// Dynamically import DotLottieReact with ssr: false
+// ── Dynamically import DotLottie (SSR-safe) ──────────────────────────────────
 const DotLottieReact = dynamic(
-  () =>
-    import("@lottiefiles/dotlottie-react").then((mod) => mod.DotLottieReact),
+  () => import("@lottiefiles/dotlottie-react").then((m) => m.DotLottieReact),
   {
     ssr: false,
     loading: () => (
       <div
         style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
+          width: 140,
+          height: 140,
+          borderRadius: "50%",
+          background: "rgba(198, 244, 50, 0.08)",
         }}
-      >
-        <div
-          style={{
-            width: 50,
-            height: 50,
-            borderRadius: "50%",
-            background: "rgba(198, 244, 50, 0.12)",
-            border: "1px solid rgba(198, 244, 50, 0.3)",
-          }}
-        />
-      </div>
+      />
     ),
   }
 );
 
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface MicuTutorSpaceProps {
   recall: Recall;
   isUploadOpen?: boolean;
@@ -76,25 +51,122 @@ interface QALogItem {
   mode: "standard" | "simple" | "analogy" | "question" | "test";
 }
 
-function masteryColor(pct: number) {
-  if (pct >= 70) return "#C6F432";
-  if (pct >= 40) return "#F4A232";
-  return "#F44232";
+// ── Background Radial Gradients per State ──────────────────────────────────────
+const AMBIENT_BG: Record<string, string> = {
+  idle: "radial-gradient(circle 700px at 50% 0%, rgba(255, 255, 255, 0.03), transparent 70%)",
+  speaking: "radial-gradient(circle 700px at 50% 0%, rgba(198, 244, 50, 0.11), transparent 70%)",
+  listening: "radial-gradient(circle 700px at 50% 0%, rgba(56, 189, 248, 0.12), transparent 70%)",
+  thinking: "radial-gradient(circle 700px at 50% 0%, rgba(168, 85, 247, 0.12), transparent 70%)",
+  "test-correct": "radial-gradient(circle 700px at 50% 0%, rgba(16, 185, 129, 0.12), transparent 70%)",
+  "test-wrong": "radial-gradient(circle 700px at 50% 0%, rgba(244, 66, 50, 0.12), transparent 70%)",
+};
+
+// ── Micu Glow Color per State ─────────────────────────────────────────────────
+const MICU_GLOW: Record<string, string> = {
+  idle: "rgba(255,255,255,0.04)",
+  speaking: "rgba(198,244,50,0.30)",
+  listening: "rgba(56,189,248,0.30)",
+  thinking: "rgba(168,85,247,0.30)",
+  "test-correct": "rgba(16,185,129,0.30)",
+  "test-wrong": "rgba(244,66,50,0.30)",
+};
+
+const STATE_LABEL: Record<string, string> = {
+  idle: "Ready",
+  speaking: "Speaking",
+  listening: "Listening",
+  thinking: "Thinking",
+  "test-correct": "Correct",
+  "test-wrong": "Review",
+};
+
+// ── Native SVG Mastery Ring ───────────────────────────────────────────────────
+function MasteryRing({ mastery }: { mastery: number }) {
+  if (mastery >= 80) {
+    return (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 14 14"
+        style={{ flexShrink: 0 }}
+        aria-hidden="true"
+      >
+        <circle
+          cx="7"
+          cy="7"
+          r="5.5"
+          fill="rgba(198,244,50,0.18)"
+          stroke="#C6F432"
+          strokeWidth="1.5"
+        />
+        <polyline
+          points="4.2,7.2 6.2,9.2 9.8,4.8"
+          fill="none"
+          stroke="#C6F432"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
+  if (mastery > 0) {
+    const r = 5;
+    const c = 2 * Math.PI * r; // ~31.416
+    const dash = (mastery / 100) * c;
+    return (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 14 14"
+        style={{ flexShrink: 0, transform: "rotate(-90deg)" }}
+        aria-hidden="true"
+      >
+        <circle
+          cx="7"
+          cy="7"
+          r={r}
+          fill="none"
+          stroke="rgba(255,255,255,0.12)"
+          strokeWidth="1.5"
+        />
+        <circle
+          cx="7"
+          cy="7"
+          r={r}
+          fill="none"
+          stroke="#F4A232"
+          strokeWidth="1.5"
+          strokeDasharray={`${dash} ${c}`}
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+
+  // 0% mastery = empty muted ring
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 14 14"
+      style={{ flexShrink: 0 }}
+      aria-hidden="true"
+    >
+      <circle
+        cx="7"
+        cy="7"
+        r="5"
+        fill="none"
+        stroke="rgba(255,255,255,0.18)"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
 }
 
-function extractKeywords(title: string, summary: string): string[] {
-  const stopWords = new Set([
-    "the", "and", "that", "this", "with", "from", "for", "are", "which",
-    "allows", "refers", "means", "used", "each", "into", "their", "have",
-    "will", "such", "than", "been", "also", "about", "other", "where",
-    "when", "while", "what", "more", "most", "some", "both", "across"
-  ]);
-  const text = `${title} ${summary}`.toLowerCase().replace(/[^\w\s]/g, " ");
-  const rawWords = text.split(/\s+/).filter((w) => w.length >= 4 && !stopWords.has(w));
-  const unique = Array.from(new Set(rawWords));
-  return unique.slice(0, 3).map((w) => w.charAt(0).toUpperCase() + w.slice(1));
-}
-
+// ── Component ─────────────────────────────────────────────────────────────────
 export function MicuTutorSpace({
   recall,
   isUploadOpen,
@@ -105,49 +177,51 @@ export function MicuTutorSpace({
   const activeIndex = recall.q;
   const values = recall.values ?? [];
 
-  // Core status
-  const [tutorState, setTutorState] = useState<TutorState>("idle");
-  const [modeType, setModeType] = useState<
-    "standard" | "simple" | "analogy" | "question" | "test"
-  >("standard");
+  // Mastered count (mastery >= 80)
+  const masteredCount = nodes.filter((_, i) => (values[i] ?? 0) >= 80).length;
 
-  // Teleprompter text & streaming reveal
+  // ── Core State ──────────────────────────────────────────────────────────────
+  const [tutorState, setTutorState] = useState<TutorState>("idle");
+  const [speechSpeed, setSpeechSpeed] = useState<number>(1.0);
   const [activeText, setActiveText] = useState("");
   const [revealedWordIndex, setRevealedWordIndex] = useState(0);
-
-  // Audio-reactive visual volume & spectrum (0 to 1)
   const [audioVolume, setAudioVolume] = useState(0);
-  const [spectrumBars, setSpectrumBars] = useState<number[]>(new Array(12).fill(0.1));
-
-  // Voice speed (0.9x, 1.0x, 1.2x)
-  const [speechSpeed, setSpeechSpeed] = useState<number>(1.0);
-
-  // Keyboard inline input toggle & query
-  const [showKeyInput, setShowKeyInput] = useState(false);
-  const [typedQuestion, setTypedQuestion] = useState("");
-
-  // History slide-over drawer & session log
   const [showHistory, setShowHistory] = useState(false);
   const [historyLog, setHistoryLog] = useState<QALogItem[]>([]);
-
-  // Test mode options state
-  const [testSelected, setTestSelected] = useState<number | null>(null);
-
-  // Error/notification messages
+  const [showKeyInput, setShowKeyInput] = useState(false);
+  const [typedQuestion, setTypedQuestion] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [quizMode, setQuizMode] = useState(false);
+  const [quizSelected, setQuizSelected] = useState<number | null>(null);
+  const [quizFeedback, setQuizFeedback] = useState("");
 
-  // Web Audio & Speech References
+  // Loading task & error state for the native status pill
+  const [loadingTask, setLoadingTask] = useState<string | null>(null);
+  const [hasError, setHasError] = useState(false);
+  const [lastAction, setLastAction] = useState<(() => void) | null>(null);
+
+  // Concept mastery overrides for live quiz updates
+  const [masteryOverrides, setMasteryOverrides] = useState<
+    Record<number, number>
+  >({});
+
+  // ── Refs ────────────────────────────────────────────────────────────────────
   const audioCtxRef = useRef<AudioContext | null>(null);
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamTimerRef = useRef<NodeJS.Timeout | null>(null);
   const recognitionRef = useRef<any>(null);
-  const testTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const teleprompterRef = useRef<HTMLDivElement | null>(null);
+  const activeWordRef = useRef<HTMLSpanElement | null>(null);
   const audioStartEpochRef = useRef<number>(0);
   const audioDurationRef = useRef<number>(0);
 
-  // Stop active speech and reset audio graph
+  // ── Mastery helper ──────────────────────────────────────────────────────────
+  const getMastery = (i: number) =>
+    masteryOverrides[i] ?? Math.round(values[i] ?? nodes[i]?.retention ?? 0);
+
+  // ── Comprehensive Audio Cancel ──────────────────────────────────────────────
   const stopSpeech = useCallback(() => {
     if (audioSourceRef.current) {
       try {
@@ -167,7 +241,6 @@ export function MicuTutorSpace({
     audioDurationRef.current = 0;
   }, []);
 
-  // Stop Speech Recognition
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
       try {
@@ -177,24 +250,37 @@ export function MicuTutorSpace({
     }
   }, []);
 
-  // Bug Fix 1: When Upload Modal Opens, Immediately Pause/Reset All Speech
+  const cancelAllAudio = useCallback(() => {
+    stopSpeech();
+    stopListening();
+  }, [stopSpeech, stopListening]);
+
+  // ── Upload open: kill audio immediately ─────────────────────────────────────
   useEffect(() => {
     if (isUploadOpen) {
-      stopSpeech();
-      stopListening();
+      cancelAllAudio();
       setTutorState("idle");
+      setLoadingTask(null);
     }
-  }, [isUploadOpen, stopSpeech, stopListening]);
+  }, [isUploadOpen, cancelAllAudio]);
 
-  // Web Audio / Browser TTS Speak Pipeline
+  // ── Auto-scroll teleprompter to active word ─────────────────────────────────
+  useEffect(() => {
+    if (activeWordRef.current) {
+      activeWordRef.current.scrollIntoView({
+        block: "nearest",
+        behavior: "smooth",
+      });
+    }
+  }, [revealedWordIndex]);
+
+  // ── Speak Pipeline ──────────────────────────────────────────────────────────
   const speakText = useCallback(
     async (textToSpeak: string) => {
-      stopSpeech();
-      stopListening();
+      cancelAllAudio();
       setTutorState("speaking");
       setActiveText(textToSpeak);
       setRevealedWordIndex(0);
-
       const words = textToSpeak.split(" ");
       const totalWords = words.length;
 
@@ -214,7 +300,6 @@ export function MicuTutorSpace({
           voices.find((v) => v.lang.startsWith("en")) ||
           voices[0];
         if (preferred) utterance.voice = preferred;
-
         let wIdx = 0;
         const intervalMs = Math.max(90, Math.floor(140 / speechSpeed));
         streamTimerRef.current = setInterval(() => {
@@ -225,14 +310,11 @@ export function MicuTutorSpace({
             streamTimerRef.current = null;
           }
         }, intervalMs);
-
         utterance.onend = () => {
           setTutorState("idle");
           setRevealedWordIndex(totalWords);
         };
-        utterance.onerror = () => {
-          setTutorState("idle");
-        };
+        utterance.onerror = () => setTutorState("idle");
         window.speechSynthesis.speak(utterance);
       };
 
@@ -242,47 +324,34 @@ export function MicuTutorSpace({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: textToSpeak }),
         });
-
         if (!response.ok) {
           runBrowserFallback();
           return;
         }
-
         const arrayBuffer = await response.arrayBuffer();
-
-        // AudioContext setup
         const AudioCtx =
           window.AudioContext || (window as any).webkitAudioContext;
-        if (!audioCtxRef.current) {
-          audioCtxRef.current = new AudioCtx();
-        }
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
         const ctx = audioCtxRef.current;
-        if (ctx.state === "suspended") {
-          await ctx.resume();
-        }
-
+        if (ctx.state === "suspended") await ctx.resume();
         const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
         const source = ctx.createBufferSource();
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 64;
-
         source.buffer = audioBuffer;
         source.playbackRate.value = speechSpeed;
         source.connect(analyser);
         analyser.connect(ctx.destination);
-
         audioSourceRef.current = source;
         analyserRef.current = analyser;
         audioDurationRef.current = audioBuffer.duration / speechSpeed;
         audioStartEpochRef.current = ctx.currentTime;
-
         source.onended = () => {
           setTutorState("idle");
           setRevealedWordIndex(totalWords);
           audioSourceRef.current = null;
           audioDurationRef.current = 0;
         };
-
         source.start();
         setTutorState("speaking");
       } catch (err) {
@@ -290,27 +359,34 @@ export function MicuTutorSpace({
         runBrowserFallback();
       }
     },
-    [speechSpeed, stopSpeech, stopListening]
+    [speechSpeed, cancelAllAudio]
   );
 
-  // Call `/api/micu-chat` Groq endpoint, append to History, then speak reply
+  // ── Micu AI Chat Call ───────────────────────────────────────────────────────
   const requestMicuAI = useCallback(
     async (
       mode: "simple" | "analogy" | "question",
       userQuestion?: string
     ) => {
       if (!activeNode) return;
-      stopSpeech();
-      stopListening();
+      cancelAllAudio();
       setTutorState("thinking");
-      setModeType(mode);
-      setTestSelected(null);
+      setHasError(false);
+      const taskLabel =
+        mode === "question"
+          ? "Answering..."
+          : mode === "simple"
+          ? "Simplifying..."
+          : "Crafting analogy...";
+      setLoadingTask(taskLabel);
+      setLastAction(() => () => requestMicuAI(mode, userQuestion));
+
       setActiveText(
         mode === "question"
           ? `Answering: "${userQuestion}"…`
           : mode === "simple"
-            ? `Simplifying ${activeNode.title}…`
-            : `Crafting a real-world analogy for ${activeNode.title}…`
+          ? `Simplifying ${activeNode.title}…`
+          : `Crafting a real-world analogy for ${activeNode.title}…`
       );
 
       try {
@@ -325,10 +401,10 @@ export function MicuTutorSpace({
           }),
         });
 
-        const data = await res.json();
-        const reply =
-          data.reply || `${activeNode.title}. ${activeNode.summary}`;
+        if (!res.ok) throw new Error("Micu request failed");
 
+        const data = await res.json();
+        const reply = data.reply || `${activeNode.title}. ${activeNode.summary}`;
         const now = new Date();
         const timeStr = now.toLocaleTimeString([], {
           hour: "2-digit",
@@ -339,9 +415,8 @@ export function MicuTutorSpace({
           (mode === "simple"
             ? "Explain simply"
             : mode === "analogy"
-              ? "Real-world analogy"
-              : "Overview");
-
+            ? "Real-world analogy"
+            : "Overview");
         setHistoryLog((prev) => [
           {
             id: Math.random().toString(36).slice(2, 9),
@@ -354,41 +429,54 @@ export function MicuTutorSpace({
           ...prev,
         ]);
 
+        setLoadingTask(null);
         await speakText(reply);
       } catch (err) {
         console.error("Micu Chat error:", err);
+        setLoadingTask(null);
+        setHasError(true);
         const fallback = `${activeNode.title}. ${activeNode.summary}`;
         await speakText(fallback);
       }
     },
-    [activeNode, speakText, stopSpeech, stopListening]
+    [activeNode, speakText, cancelAllAudio]
   );
 
-  // Real-Time Audio-reactive volume loop (RMS calculation + Spectrum Bars + Word Sync)
+  // ── Explain (standard) ──────────────────────────────────────────────────────
+  const handleExplain = useCallback(() => {
+    if (!activeNode) return;
+    const text = `${activeNode.title}. ${activeNode.summary}`;
+    setLoadingTask("Explaining...");
+    setHasError(false);
+    speakText(text).finally(() => {
+      setLoadingTask(null);
+    });
+  }, [activeNode, speakText]);
+
+  // ── Audio-Reactive RAF Volume Loop ──────────────────────────────────────────
   useEffect(() => {
     let animId: number;
-
     const tick = () => {
       const now = performance.now();
       const totalWords = activeText ? activeText.split(" ").length : 0;
-
-      // 1. Precise Teleprompter Word Sync using AudioContext currentTime
-      if (tutorState === "speaking" && audioCtxRef.current && audioDurationRef.current > 0 && totalWords > 0) {
-        const elapsed = (audioCtxRef.current.currentTime - audioStartEpochRef.current);
-        const progress = Math.min(1, Math.max(0, elapsed / audioDurationRef.current));
-        const syncIndex = Math.floor(progress * totalWords);
-        setRevealedWordIndex(syncIndex);
+      if (
+        tutorState === "speaking" &&
+        audioCtxRef.current &&
+        audioDurationRef.current > 0 &&
+        totalWords > 0
+      ) {
+        const elapsed =
+          audioCtxRef.current.currentTime - audioStartEpochRef.current;
+        const progress = Math.min(
+          1,
+          Math.max(0, elapsed / audioDurationRef.current)
+        );
+        setRevealedWordIndex(Math.floor(progress * totalWords));
       }
-
-      // 2. Audio-reactive Volume & 12-Bar Spectrum
       if (tutorState === "speaking") {
         if (analyserRef.current) {
-          const freqData = new Uint8Array(analyserRef.current.frequencyBinCount);
-          analyserRef.current.getByteFrequencyData(freqData);
-
           const timeData = new Uint8Array(analyserRef.current.frequencyBinCount);
           analyserRef.current.getByteTimeDomainData(timeData);
-
           let sum = 0;
           for (let i = 0; i < timeData.length; i++) {
             const v = (timeData[i] - 128) / 128;
@@ -396,77 +484,49 @@ export function MicuTutorSpace({
           }
           const rms = Math.sqrt(sum / timeData.length);
           setAudioVolume((prev) => prev * 0.7 + Math.min(1, rms * 3.6) * 0.3);
-
-          // Sample 12 spectrum bars
-          const step = Math.max(1, Math.floor(freqData.length / 12));
-          const bars: number[] = [];
-          for (let b = 0; b < 12; b++) {
-            const rawVal = freqData[Math.min(freqData.length - 1, b * step)] / 255;
-            bars.push(Math.max(0.1, rawVal));
-          }
-          setSpectrumBars(bars);
         } else {
           const t = now * 0.009;
-          const fakeRms = Math.sin(t) * 0.25 + 0.35;
-          setAudioVolume(fakeRms);
-          setSpectrumBars(
-            new Array(12).fill(0).map((_, i) => Math.max(0.12, Math.sin(t + i * 0.5) * 0.35 + 0.4))
-          );
+          setAudioVolume(Math.sin(t) * 0.25 + 0.35);
         }
       } else if (tutorState === "thinking" || tutorState === "listening") {
         const t = now * 0.005;
-        const v = 0.18 + Math.sin(t) * 0.12;
-        setAudioVolume(v);
-        setSpectrumBars(
-          new Array(12).fill(0).map((_, i) => Math.max(0.08, Math.sin(t * 1.5 + i * 0.4) * 0.18 + 0.22))
-        );
+        setAudioVolume(0.18 + Math.sin(t) * 0.12);
       } else {
         setAudioVolume((prev) => Math.max(0, prev * 0.85));
-        const t = now * 0.002;
-        setSpectrumBars(
-          new Array(12).fill(0).map((_, i) => Math.max(0.06, Math.sin(t + i * 0.3) * 0.08 + 0.1))
-        );
       }
-
       animId = requestAnimationFrame(tick);
     };
-
     animId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animId);
   }, [tutorState, activeText]);
 
-  // Push-to-Talk Mic (SpeechRecognition)
+  // ── Push-to-Talk (SpeechRecognition) ────────────────────────────────────────
   const toggleListening = useCallback(() => {
     if (tutorState === "listening") {
       stopListening();
       setTutorState("idle");
       return;
     }
-
     const SpeechRec =
       typeof window !== "undefined"
         ? (window as any).SpeechRecognition ||
           (window as any).webkitSpeechRecognition
         : null;
-
     if (!SpeechRec) {
-      setStatusMessage("Speech recognition is not supported in this browser.");
+      setStatusMessage("Speech recognition not supported in this browser.");
       setTimeout(() => setStatusMessage(""), 3500);
       return;
     }
-
     try {
-      stopSpeech();
+      cancelAllAudio();
       const rec = new SpeechRec();
       rec.continuous = false;
       rec.interimResults = false;
       rec.lang = "en-US";
-
       rec.onstart = () => {
         setTutorState("listening");
         setStatusMessage("");
       };
-
       rec.onresult = (event: any) => {
         const transcript = event.results?.[0]?.[0]?.transcript;
         if (transcript) {
@@ -474,25 +534,24 @@ export function MicuTutorSpace({
           requestMicuAI("question", transcript);
         }
       };
-
       rec.onerror = () => {
         stopListening();
         setTutorState("idle");
       };
-
       rec.onend = () => {
         stopListening();
-        setTutorState((prev) => (prev === "listening" ? "idle" : prev));
+        setTutorState((prev: TutorState) =>
+          prev === "listening" ? "idle" : prev
+        );
       };
-
       recognitionRef.current = rec;
       rec.start();
     } catch {
       setTutorState("idle");
     }
-  }, [tutorState, stopSpeech, stopListening, requestMicuAI]);
+  }, [tutorState, cancelAllAudio, stopListening, requestMicuAI]);
 
-  // Handle Typed Question Submit
+  // ── Typed Question Submit ───────────────────────────────────────────────────
   const handleTypedSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!typedQuestion.trim()) return;
@@ -502,1744 +561,1241 @@ export function MicuTutorSpace({
     requestMicuAI("question", q);
   };
 
-  // Reset text when active node changes
-  useEffect(() => {
-    stopSpeech();
-    stopListening();
-    setTestSelected(null);
-    setModeType("standard");
+  // ── Quiz Mode Handlers ──────────────────────────────────────────────────────
+  const handleTestMe = useCallback(() => {
+    cancelAllAudio();
+    setQuizMode(true);
+    setQuizSelected(null);
+    setQuizFeedback("");
     setTutorState("idle");
+    const qz = activeNode?.quiz;
+    if (qz) speakText(`Quick check: ${qz.question}`);
+  }, [activeNode, speakText, cancelAllAudio]);
+
+  const handleAnswerQuiz = (optIdx: number) => {
+    if (quizSelected !== null || !activeNode?.quiz) return;
+    setQuizSelected(optIdx);
+    const isCorrect = optIdx === activeNode.quiz.correctIndex;
+    setTutorState(isCorrect ? "test-correct" : "test-wrong");
+    setQuizFeedback(
+      isCorrect
+        ? `✓ Correct! ${activeNode.quiz.explanation}`
+        : `✗ Not quite. ${activeNode.quiz.explanation}`
+    );
+    // Live mastery update
+    const prevMastery = getMastery(activeIndex);
+    const newMastery = isCorrect
+      ? Math.min(100, prevMastery + 20)
+      : Math.max(0, prevMastery - 10);
+    setMasteryOverrides((prev) => ({ ...prev, [activeIndex]: newMastery }));
+    speakText(
+      isCorrect
+        ? `Correct! ${activeNode.quiz.explanation}`
+        : `Not quite. ${activeNode.quiz.explanation}`
+    );
+  };
+
+  const exitQuiz = useCallback(() => {
+    cancelAllAudio();
+    setQuizMode(false);
+    setQuizSelected(null);
+    setQuizFeedback("");
+    setTutorState("idle");
+  }, [cancelAllAudio]);
+
+  const nextConcept = useCallback(() => {
+    cancelAllAudio();
+    const nextIdx = (activeIndex + 1) % nodes.length;
+    recall.focusNode(nextIdx);
+  }, [cancelAllAudio, activeIndex, nodes.length, recall]);
+
+  // ── Reset on concept change ──────────────────────────────────────────────────
+  useEffect(() => {
+    cancelAllAudio();
+    setQuizMode(false);
+    setQuizSelected(null);
+    setQuizFeedback("");
+    setTutorState("idle");
+    setLoadingTask(null);
+    setHasError(false);
     if (activeNode) {
       const initialText = `${activeNode.title}. ${activeNode.summary}`;
       setActiveText(initialText);
       setRevealedWordIndex(initialText.split(" ").length);
     }
-  }, [activeNode?.id, stopSpeech, stopListening]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNode?.id]);
 
-  // Full Cleanup on unmount or tab switch
+  // ── Unmount / Visibility Cleanup ────────────────────────────────────────────
   useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden) {
-        stopSpeech();
-        stopListening();
+        cancelAllAudio();
         setTutorState("idle");
       }
     };
-
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
-      stopSpeech();
-      stopListening();
-      if (testTimeoutRef.current) {
-        clearTimeout(testTimeoutRef.current);
-      }
+      cancelAllAudio();
       if (audioCtxRef.current) {
         audioCtxRef.current.close().catch(() => {});
         audioCtxRef.current = null;
       }
     };
-  }, [stopSpeech, stopListening]);
+  }, [cancelAllAudio]);
 
-  // Focus inline input when keyboard mode opens
+  // ── Focus inline input when opened ──────────────────────────────────────────
   useEffect(() => {
-    if (showKeyInput) {
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
+    if (showKeyInput) setTimeout(() => inputRef.current?.focus(), 50);
   }, [showKeyInput]);
 
-  // Action Chip Handlers
-  const handleExplainSimply = () => {
-    requestMicuAI("simple");
-  };
-
-  const handleAnalogy = () => {
-    requestMicuAI("analogy");
-  };
-
-  const handleTestMe = () => {
-    stopSpeech();
-    stopListening();
-    setModeType("test");
-    setTestSelected(null);
-    setTutorState("idle");
-    const qz = activeNode?.quiz;
-    if (qz) {
-      setActiveText(qz.question);
-      speakText(`Quick check: ${qz.question}`);
-    }
-  };
-
-  const handleAnswerTest = (optIdx: number) => {
-    if (testSelected !== null || !activeNode?.quiz) return;
-    setTestSelected(optIdx);
-    const isCorrect = optIdx === activeNode.quiz.correctIndex;
-
-    setTutorState(isCorrect ? "test-correct" : "test-wrong");
-
-    const feedback = isCorrect
-      ? `Correct! ${activeNode.quiz.explanation}`
-      : `Not quite. ${activeNode.quiz.explanation}`;
-
-    speakText(feedback);
-
-    if (testTimeoutRef.current) clearTimeout(testTimeoutRef.current);
-    testTimeoutRef.current = setTimeout(() => {
-      if (tutorState === "test-correct" || tutorState === "test-wrong") {
-        setTutorState("idle");
-      }
-    }, 4500);
-  };
-
-  // State-Reactive Colors & Status Pill
-  const getStateInfo = () => {
-    switch (tutorState) {
-      case "listening":
-        return {
-          color: "#38BDF8",
-          label: "LISTENING",
-          glow: "rgba(56, 189, 248, 0.4)",
-        };
-      case "thinking":
-        return {
-          color: "#A855F7",
-          label: "THINKING",
-          glow: "rgba(168, 85, 247, 0.4)",
-        };
-      case "speaking":
-        return {
-          color: "#C6F432",
-          label: "SPEAKING",
-          glow: "rgba(198, 244, 50, 0.45)",
-        };
-      case "test-correct":
-        return {
-          color: "#10B981",
-          label: "CORRECT",
-          glow: "rgba(16, 185, 129, 0.45)",
-        };
-      case "test-wrong":
-        return {
-          color: "#F44232",
-          label: "REVIEW",
-          glow: "rgba(244, 66, 50, 0.45)",
-        };
-      default:
-        return {
-          color: "rgba(255, 255, 255, 0.4)",
-          label: "READY",
-          glow: "rgba(255, 255, 255, 0.05)",
-        };
-    }
-  };
-
-  const stateInfo = getStateInfo();
+  // ── Derived Variables ────────────────────────────────────────────────────────
   const words = activeText.split(" ");
   const quiz = activeNode?.quiz;
-  const currentMastery = Math.round(values[activeIndex] ?? activeNode?.retention ?? 80);
-  const currentMasteryColor = masteryColor(currentMastery);
-
-  // Derive 3 keyword chips from concept title and summary
-  const keywordChips = useMemo(() => {
-    if (!activeNode) return [];
-    return extractKeywords(activeNode.title, activeNode.summary);
-  }, [activeNode?.title, activeNode?.summary]);
-
-  // Up next in deck list (next 3-4 nodes)
-  const upNextNodes = useMemo(() => {
-    if (!nodes.length) return [];
-    const list = [];
-    for (let i = 1; i <= Math.min(4, nodes.length - 1); i++) {
-      const idx = (activeIndex + i) % nodes.length;
-      list.push({ node: nodes[idx], idx });
-    }
-    return list;
-  }, [nodes, activeIndex]);
-
-  // Vision Pro Focus-Dimming: true when Micu is speaking or listening
   const isDimmed = tutorState === "speaking" || tutorState === "listening";
+  const ambientBackground = AMBIENT_BG[tutorState] ?? AMBIENT_BG.idle;
+  const micuGlow = MICU_GLOW[tutorState] ?? MICU_GLOW.idle;
+  const micuSize = `clamp(130px, 22vh, 185px)`;
+  const currentMastery = getMastery(activeIndex);
 
   return (
     <>
       <style>{`
         @keyframes micuFloat {
-          0% { transform: translateY(0px); }
-          100% { transform: translateY(-7px); }
+          0%, 100% { transform: translateY(0); }
+          50%      { transform: translateY(-7px); }
         }
-        @keyframes soundwaveBar {
-          0%, 100% { height: 3px; }
-          50% { height: 11px; }
+        @keyframes pulseDot {
+          0%, 100% { opacity: 0.4; transform: scale(0.85); }
+          50%      { opacity: 1; transform: scale(1.15); }
         }
-        @keyframes waveRibbonA {
-          0% { stroke-dashoffset: 0; }
-          100% { stroke-dashoffset: 40; }
-        }
-        @keyframes waveRibbonB {
-          0% { stroke-dashoffset: 40; }
-          100% { stroke-dashoffset: 0; }
-        }
-        @keyframes rotateGlow {
-          from { transform: translate(-50%, -50%) rotate(0deg); }
-          to { transform: translate(-50%, -50%) rotate(360deg); }
-        }
-        @keyframes pulseRing {
-          0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.45; }
-          50% { transform: translate(-50%, -50%) scale(1.08); opacity: 0.85; }
-        }
-
-        .micu-spatial-grid {
+        .mts-root {
           display: grid;
-          grid-template-columns: 230px minmax(0, 1fr) 230px;
-          align-items: center;
-          gap: 16px;
+          grid-template-columns: 256px minmax(0, 1fr);
+          height: 100%;
           width: 100%;
-          max-width: 1260px;
-          margin: 0 auto;
+          background: #0B0B0C;
+          overflow: hidden;
+          position: relative;
+        }
+        @media (max-width: 1023px) {
+          .mts-root { grid-template-columns: 1fr; }
+          .mts-left  { display: none !important; }
+        }
+        .mts-left {
+          border-right: 1px solid rgba(255, 255, 255, 0.06);
+          padding: 20px 14px;
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          background: #0B0B0C;
+          z-index: 10;
+          transition: opacity 280ms ease;
+        }
+        .mts-left.dimmed { opacity: 0.42; }
+        .mts-left:hover  { opacity: 1 !important; }
+        .mts-concept-row {
+          padding: 9px 10px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          text-align: left;
+          position: relative;
+          cursor: pointer;
+          background: transparent;
+          border: none;
+          color: #A1A1AA;
+          width: 100%;
+          transition: background 0.14s, color 0.14s;
+        }
+        .mts-concept-row:hover {
+          background: rgba(255, 255, 255, 0.04);
+          color: #E4E4E7;
+        }
+        .mts-concept-row.active {
+          background: rgba(255, 255, 255, 0.06);
+          color: #FAFAFA;
+        }
+        .mts-concept-row.active::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 2px;
+          height: 60%;
+          border-radius: 2px;
+          background: #C6F432;
+        }
+        .mts-right {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          min-height: 0;
+          padding: 16px 32px 20px;
+          overflow: hidden;
+          transition: padding-right 280ms ease;
+        }
+        .mts-top-bar {
+          position: relative;
+          z-index: 20;
+          display: flex;
+          justify-content: flex-end;
+          align-items: center;
+          gap: 10px;
+          flex-shrink: 0;
+          margin-bottom: 4px;
+        }
+        .mts-ghost-btn {
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.09);
+          border-radius: 9px;
+          color: rgba(255, 255, 255, 0.65);
+          font-size: 12px;
+          font-weight: 500;
+          padding: 5px 12px;
+          cursor: pointer;
+          transition: background 0.15s, color 0.15s;
+          white-space: nowrap;
+        }
+        .mts-ghost-btn:hover {
+          background: rgba(255, 255, 255, 0.09);
+          color: #FAFAFA;
+        }
+        .mts-ghost-btn.active {
+          background: rgba(198, 244, 50, 0.12);
+          border-color: rgba(198, 244, 50, 0.3);
+          color: #C6F432;
+        }
+        .mts-stage {
+          position: relative;
+          z-index: 10;
           flex: 1 1 auto;
           min-height: 0;
-          height: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
         }
-
-        .micu-peripheral-cluster {
-          transition: opacity 0.4s ease, border-color 0.3s ease;
+        .mts-dock-container {
+          position: relative;
+          z-index: 20;
+          flex-shrink: 0;
+          margin: 10px auto 0;
+          max-width: 640px;
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
         }
-        .micu-peripheral-cluster.dimmed {
-          opacity: 0.42;
+        .mts-dock {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 7px 10px;
+          background: rgba(24, 24, 27, 0.86);
+          border: 1px solid rgba(255, 255, 255, 0.09);
+          border-radius: 18px;
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+          flex-wrap: nowrap;
+          width: 100%;
         }
-        .micu-peripheral-cluster:hover {
-          opacity: 1 !important;
+        .mts-dock-sep {
+          width: 1px;
+          height: 20px;
+          background: rgba(255, 255, 255, 0.1);
+          flex-shrink: 0;
+          margin: 0 2px;
         }
-
-        @media (max-width: 1079px) {
-          .micu-spatial-grid {
-            grid-template-columns: 1fr;
-          }
-          .micu-peripheral-cluster {
-            display: none !important;
-          }
+        .mts-dock-btn {
+          background: transparent;
+          border: none;
+          color: rgba(255, 255, 255, 0.72);
+          font-size: 13px;
+          font-weight: 500;
+          padding: 6px 11px;
+          border-radius: 10px;
+          cursor: pointer;
+          transition: background 0.14s, color 0.14s;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .mts-dock-btn:hover {
+          background: rgba(255, 255, 255, 0.08);
+          color: #FAFAFA;
+        }
+        .mts-dock-btn.primary {
+          background: #C6F432;
+          color: #0B0B0C;
+          font-weight: 650;
+        }
+        .mts-dock-btn.primary:hover { filter: brightness(1.08); }
+        .mts-dock-btn.stop-btn {
+          background: rgba(244, 66, 50, 0.14);
+          color: #f87171;
+          border: 1px solid rgba(244, 66, 50, 0.2);
+        }
+        .mts-dock-btn.stop-btn:hover { background: rgba(244, 66, 50, 0.22); }
+        .mts-dock-btn.active {
+          background: rgba(255, 255, 255, 0.1);
+          color: #FAFAFA;
+        }
+        .mts-teleprompter {
+          max-width: 640px;
+          width: 100%;
+          max-height: 155px;
+          overflow-y: auto;
+          scrollbar-width: none;
+          text-align: center;
+          padding: 0 8px;
+          font-size: 15px;
+          line-height: 1.65;
+        }
+        .mts-history-drawer {
+          position: absolute;
+          top: 56px;
+          right: 20px;
+          bottom: 84px;
+          width: 320px;
+          z-index: 40;
+          display: flex;
+          flex-direction: column;
+          background: rgba(14, 14, 17, 0.94);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 18px;
+          backdrop-filter: blur(24px);
+          -webkit-backdrop-filter: blur(24px);
+          overflow: hidden;
+        }
+        .mts-quiz-card {
+          max-width: 660px;
+          width: 100%;
+          flex: 0 1 auto;
+          max-height: calc(100% - 60px);
+          overflow-y: auto;
+          padding: 16px 20px;
+          border-radius: 16px;
+          background: rgba(24, 24, 27, 0.85);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+        }
+        .mts-quiz-opts {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px;
+          margin-top: 12px;
+        }
+        .mts-quiz-opt {
+          padding: 10px 12px;
+          border-radius: 10px;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.09);
+          color: rgba(255, 255, 255, 0.85);
+          font-size: 13px;
+          text-align: left;
+          cursor: pointer;
+          transition: background 0.14s, border-color 0.14s;
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          line-height: 1.4;
+        }
+        .mts-quiz-opt:hover:not(:disabled) {
+          background: rgba(255, 255, 255, 0.09);
+        }
+        .mts-quiz-opt:disabled { cursor: default; }
+        .mts-quiz-opt.correct {
+          background: rgba(16, 185, 129, 0.14);
+          border-color: rgba(16, 185, 129, 0.4);
+          color: #6ee7b7;
+        }
+        .mts-quiz-opt.wrong {
+          background: rgba(244, 66, 50, 0.12);
+          border-color: rgba(244, 66, 50, 0.35);
+          color: #fca5a5;
+        }
+        .mts-quiz-opt.neutral-after { opacity: 0.5; }
+        .mts-opt-label {
+          font-size: 11px;
+          font-weight: 650;
+          opacity: 0.5;
+          flex-shrink: 0;
+          margin-top: 1px;
+        }
+        .mts-quiz-feedback {
+          margin-top: 10px;
+          padding: 9px 12px;
+          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.07);
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.75);
+          line-height: 1.5;
+        }
+        .mts-quiz-footer {
+          display: flex;
+          gap: 8px;
+          margin-top: 12px;
+          justify-content: flex-end;
+        }
+        .mts-status-msg {
+          position: absolute;
+          bottom: 100px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(14, 14, 17, 0.92);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 10px;
+          padding: 7px 14px;
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.75);
+          pointer-events: none;
+          z-index: 50;
+          white-space: nowrap;
+        }
+        .mts-concept-title-text {
+          font-size: clamp(22px, 2.3vw, 28px);
+          font-weight: 600;
+          letter-spacing: -0.02em;
+          color: #FAFAFA;
+          text-align: center;
+          max-width: 580px;
+          line-height: 1.2;
+          margin: 0;
+        }
+        .mts-hairline {
+          width: 96px;
+          height: 2px;
+          border-radius: 2px;
+          background: rgba(255, 255, 255, 0.1);
+          position: relative;
+          overflow: hidden;
+        }
+        .mts-hairline-fill {
+          position: absolute;
+          inset-block: 0;
+          left: 0;
+          border-radius: 2px;
+          background: #C6F432;
+          transition: width 0.6s ease;
+        }
+        .mts-micu-wrap {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .mts-aura {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          border-radius: 50%;
+          pointer-events: none;
+          transition: background 0.4s ease, width 0.15s ease, height 0.15s ease;
+          filter: blur(36px);
+        }
+        .mts-micu-inner {
+          position: relative;
+          z-index: 2;
+          animation: micuFloat 3.2s ease-in-out infinite alternate;
+        }
+        .mts-state-caption {
+          font-size: 12px;
+          color: #71717A;
+          text-align: center;
+          letter-spacing: 0.03em;
+        }
+        .mts-quiz-header {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-shrink: 0;
+          margin-bottom: 8px;
         }
       `}</style>
 
-      {/* ── Strict 100% Viewport Fit Stage ───────────────────────────────── */}
-      <div
-        style={{
-          height: "100%",
-          width: "100%",
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-          position: "relative",
-          background: "#0B0B0C",
-          padding: "12px 20px 16px",
-          gap: 8,
-          userSelect: "none",
-        }}
-      >
-        {/* Atmospheric Spatial Background: Radial-Masked Dot-Grid */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            inset: 0,
-            pointerEvents: "none",
-            zIndex: 0,
-            backgroundImage:
-              "radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px)",
-            backgroundSize: "24px 24px",
-            maskImage:
-              "radial-gradient(ellipse at center, black 30%, transparent 80%)",
-            WebkitMaskImage:
-              "radial-gradient(ellipse at center, black 30%, transparent 80%)",
-          }}
-        />
+      {/* ── 2-Column Grid Root ─────────────────────────────────────────────── */}
+      <div className="mts-root">
 
-        {/* ── ROW 1: Top Concept Strip with Edge Masks + History (N) ────────── */}
-        <div
-          style={{
-            flexShrink: 0,
-            width: "100%",
-            maxWidth: 1040,
-            margin: "0 auto",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            zIndex: 10,
-          }}
-        >
-          {/* Scrollable Concept Pills with Fade Mask */}
-          <nav
-            aria-label="Concepts"
+        {/* ── LEFT: Borderless Concept Index ───────────────────────────────── */}
+        <aside className={`mts-left${isDimmed ? " dimmed" : ""}`}>
+          {/* Header */}
+          <div style={{ marginBottom: 4 }}>
+            <p
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: "#F4F4F5",
+                margin: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {recall.deck?.name ?? "Deck"}
+            </p>
+            <p
+              style={{
+                fontSize: 12,
+                color: "#71717A",
+                margin: "2px 0 0",
+              }}
+            >
+              {nodes.length} concepts · {masteredCount} mastered
+            </p>
+            {/* Slim 2px progress bar */}
+            <div
+              style={{
+                width: "100%",
+                height: 2,
+                borderRadius: 2,
+                background: "rgba(255,255,255,0.08)",
+                marginTop: 8,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${
+                    nodes.length > 0 ? (masteredCount / nodes.length) * 100 : 0
+                  }%`,
+                  background: "#C6F432",
+                  transition: "width 0.4s ease",
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Scrollable concept list */}
+          <div
             style={{
               flex: 1,
-              minWidth: 0,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "4px 10px",
-              background: "rgba(18, 19, 23, 0.78)",
-              backdropFilter: "blur(18px)",
-              WebkitBackdropFilter: "blur(18px)",
-              border: "1px solid rgba(255, 255, 255, 0.08)",
-              borderRadius: 999,
-              overflowX: "auto",
+              overflowY: "auto",
               scrollbarWidth: "none",
-              maskImage:
-                "linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent)",
-              WebkitMaskImage:
-                "linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+              marginTop: 14,
             }}
           >
             {nodes.map((node, i) => {
-              const mastery = Math.round(values[i] ?? node.retention);
-              const isCurrent = i === activeIndex;
-              const dotColor = masteryColor(mastery);
+              const mastery = getMastery(i);
+              const isActive = i === activeIndex;
 
               return (
                 <button
                   key={node.id}
-                  onClick={() => recall.focusNode(i)}
-                  aria-pressed={isCurrent}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: "5px 11px",
-                    borderRadius: 999,
-                    background: isCurrent
-                      ? "rgba(255, 255, 255, 0.12)"
-                      : "transparent",
-                    border: isCurrent
-                      ? "1px solid rgba(198, 244, 50, 0.45)"
-                      : "1px solid transparent",
-                    color: isCurrent ? "#fff" : "rgba(255, 255, 255, 0.52)",
-                    fontSize: 12,
-                    fontWeight: isCurrent ? 600 : 500,
-                    whiteSpace: "nowrap",
-                    cursor: "pointer",
-                    transition: "all 0.18s ease",
-                    flexShrink: 0,
+                  className={`mts-concept-row${isActive ? " active" : ""}`}
+                  onClick={() => {
+                    cancelAllAudio();
+                    recall.focusNode(i);
                   }}
+                  aria-pressed={isActive}
                 >
+                  <MasteryRing mastery={mastery} />
                   <span
                     style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      background: dotColor,
-                      boxShadow: isCurrent ? `0 0 8px ${dotColor}` : "none",
+                      flex: 1,
+                      minWidth: 0,
+                      fontSize: 13,
+                      lineHeight: 1.35,
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      textAlign: "left",
                     }}
-                  />
-                  <span>{node.title}</span>
+                  >
+                    {node.title}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontVariantNumeric: "tabular-nums",
+                      flexShrink: 0,
+                      color:
+                        mastery >= 80
+                          ? "#C6F432"
+                          : mastery > 0
+                          ? "#A1A1AA"
+                          : "#71717A",
+                    }}
+                  >
+                    {mastery === 0 ? "New" : `${mastery}%`}
+                  </span>
                 </button>
               );
             })}
-          </nav>
+          </div>
+        </aside>
 
-          {/* History (N) Glass Pill Button */}
-          <button
-            onClick={() => setShowHistory((v) => !v)}
-            aria-label="Toggle history transcript"
-            aria-expanded={showHistory}
+        {/* ── RIGHT: Main Spatial Stage ─────────────────────────────────────── */}
+        <div
+          className="mts-right"
+          style={{
+            paddingRight: showHistory ? 344 : 32,
+          }}
+        >
+          {/* Subtle Ambient CSS Backdrop */}
+          <div
+            aria-hidden="true"
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "5px 12px",
-              borderRadius: 999,
-              background: showHistory
-                ? "rgba(198, 244, 50, 0.18)"
-                : "rgba(18, 19, 23, 0.8)",
-              border: showHistory
-                ? "1px solid rgba(198, 244, 50, 0.45)"
-                : "1px solid rgba(255, 255, 255, 0.1)",
-              backdropFilter: "blur(18px)",
-              color: showHistory ? "#C6F432" : "rgba(255, 255, 255, 0.8)",
-              fontSize: 12,
-              fontWeight: 550,
-              cursor: "pointer",
-              transition: "all 0.18s ease",
-              flexShrink: 0,
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              zIndex: 0,
+              background: ambientBackground,
+              transition: "background 500ms ease",
             }}
-          >
-            <History
-              size={13}
+          />
+
+          {/* Row 1 — Top-right utility bar */}
+          <div className="mts-top-bar">
+            {/* Native segmented speed toggle */}
+            <div
               style={{
-                color: showHistory ? "#C6F432" : "rgba(255,255,255,0.7)",
+                display: "inline-flex",
+                alignItems: "center",
+                background: "#18181B",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 8,
+                padding: 2,
+                gap: 2,
               }}
-            />
-            <span>History ({historyLog.length})</span>
-          </button>
-        </div>
-
-        {/* ── ROW 2: 3-Zone Spatial Stage (Peripheral Satellites + Center) ─── */}
-        <div className="micu-spatial-grid" style={{ zIndex: 5 }}>
-          {/* ── Left Peripheral Cluster (Floating Translucent Glass) ───────── */}
-          <aside
-            className={`micu-peripheral-cluster ${isDimmed ? "dimmed" : ""}`}
-            style={{
-              background: "rgba(255, 255, 255, 0.025)",
-              border: "1px solid rgba(255, 255, 255, 0.07)",
-              borderRadius: 20,
-              padding: "16px",
-              backdropFilter: "blur(18px)",
-              WebkitBackdropFilter: "blur(18px)",
-              height: "calc(100% - 10px)",
-              maxHeight: 440,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              overflow: "hidden",
-            }}
-          >
-            {/* Active Concept Mastery Meter */}
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  padding: "3px 8px",
-                  borderRadius: 999,
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(255, 255, 255, 0.08)",
-                  fontSize: 10,
-                  fontFamily: "ui-monospace, monospace",
-                  fontWeight: 650,
-                  color: "rgba(255, 255, 255, 0.6)",
-                  letterSpacing: "0.8px",
-                }}
-              >
-                <span>CONCEPT {activeIndex + 1} OF {nodes.length}</span>
-              </div>
-
-              {/* Circular SVG Mastery Ring */}
-              <div style={{ position: "relative", width: 74, height: 74 }}>
-                <svg width="74" height="74" viewBox="0 0 74 74">
-                  <circle
-                    cx="37"
-                    cy="37"
-                    r="30"
-                    stroke="rgba(255,255,255,0.08)"
-                    strokeWidth="5"
-                    fill="none"
-                  />
-                  <circle
-                    cx="37"
-                    cy="37"
-                    r="30"
-                    stroke={currentMasteryColor}
-                    strokeWidth="5"
-                    fill="none"
-                    strokeDasharray={188.5}
-                    strokeDashoffset={188.5 * (1 - currentMastery / 100)}
-                    strokeLinecap="round"
-                    transform="rotate(-90 37 37)"
-                    style={{ transition: "stroke-dashoffset 0.6s ease" }}
-                  />
-                  <text
-                    x="37"
-                    y="42"
-                    textAnchor="middle"
-                    fill="#fff"
-                    fontSize="13.5"
-                    fontWeight="700"
-                    fontFamily="ui-monospace, monospace"
-                  >
-                    {currentMastery}%
-                  </text>
-                </svg>
-              </div>
-
-              <span
-                style={{
-                  fontSize: 11,
-                  fontFamily: "ui-monospace, monospace",
-                  color: currentMasteryColor,
-                  fontWeight: 600,
-                  letterSpacing: "0.5px",
-                }}
-              >
-                {currentMastery >= 70
-                  ? "STRONG RETENTION"
-                  : currentMastery >= 40
-                    ? "NEEDS PRACTICE"
-                    : "WEAK RETENTION"}
-              </span>
-            </div>
-
-            {/* Up Next in Deck */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-              <div
-                style={{
-                  fontSize: 10.5,
-                  fontFamily: "ui-monospace, monospace",
-                  fontWeight: 700,
-                  color: "rgba(255, 255, 255, 0.45)",
-                  letterSpacing: "0.8px",
-                  textTransform: "uppercase",
-                  paddingLeft: 2,
-                }}
-              >
-                Up Next in Deck
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                {upNextNodes.map(({ node, idx }) => (
+            >
+              {[0.9, 1.0, 1.2].map((s) => {
+                const isAct = speechSpeed === s;
+                return (
                   <button
-                    key={node.id}
-                    onClick={() => recall.focusNode(idx)}
+                    key={s}
+                    type="button"
+                    onClick={() => setSpeechSpeed(s)}
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "6px 9px",
-                      borderRadius: 8,
-                      background: "rgba(255, 255, 255, 0.03)",
-                      border: "1px solid rgba(255, 255, 255, 0.06)",
-                      color: "rgba(255, 255, 255, 0.7)",
+                      padding: "4px 8px",
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 550,
+                      border: "none",
                       cursor: "pointer",
-                      textAlign: "left",
-                      width: "100%",
+                      background: isAct ? "#27272A" : "transparent",
+                      color: isAct ? "#FAFAFA" : "#71717A",
                       transition: "all 0.15s ease",
                     }}
                   >
-                    <span
-                      style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: "50%",
-                        background: masteryColor(values[idx] ?? node.retention),
-                        flexShrink: 0,
-                      }}
-                    />
-                    <span
-                      style={{
-                        fontSize: 11,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        flex: 1,
-                      }}
-                    >
-                      {node.title}
-                    </span>
+                    {s.toFixed(1)}×
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          </aside>
 
-          {/* ── Center Column: Canopy + Hovering Micu + Teleprompter ──────── */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "space-between",
-              height: "100%",
-              minHeight: 0,
-              gap: 6,
-            }}
-          >
-            {/* Upper Spatial Canopy (Title + Keywords + Acoustic Wave Ribbon) */}
-            <div
-              style={{
-                flexShrink: 0,
-                textAlign: "center",
-                width: "100%",
-                maxWidth: 480,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-              }}
+            <button
+              className={`mts-ghost-btn${showHistory ? " active" : ""}`}
+              onClick={() => setShowHistory((v) => !v)}
+              aria-label="Toggle session history"
+              aria-expanded={showHistory}
             >
-              {/* Concept Index Pill */}
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  padding: "2px 8px",
-                  borderRadius: 999,
-                  background: "rgba(198, 244, 50, 0.08)",
-                  border: "1px solid rgba(198, 244, 50, 0.25)",
-                  fontSize: 9.5,
-                  fontFamily: "ui-monospace, monospace",
-                  fontWeight: 700,
-                  color: "#C6F432",
-                  letterSpacing: "1px",
-                  marginBottom: 3,
-                }}
-              >
-                <span>CONCEPT {activeIndex + 1} OF {nodes.length} · ACTIVE DECK</span>
-              </div>
-
-              {/* Crisp Editorial Concept Title */}
-              <h2
-                style={{
-                  margin: "0 0 5px",
-                  fontSize: "clamp(18px, 2.2vw, 25px)",
-                  fontWeight: 600,
-                  lineHeight: 1.15,
-                  color: "#fff",
-                  letterSpacing: "-0.5px",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  maxWidth: "100%",
-                }}
-              >
-                {activeNode?.title}
-              </h2>
-
-              {/* 3 Subtle Floating Keyword Chips */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  justifyContent: "center",
-                  flexWrap: "nowrap",
-                  marginBottom: 3,
-                }}
-              >
-                {keywordChips.map((chip, idx) => (
-                  <span
-                    key={idx}
-                    style={{
-                      padding: "2px 7px",
-                      borderRadius: 999,
-                      background: "rgba(255, 255, 255, 0.04)",
-                      border: "1px solid rgba(255, 255, 255, 0.08)",
-                      fontSize: 10,
-                      color: "rgba(255, 255, 255, 0.6)",
-                      fontFamily: "ui-monospace, monospace",
-                    }}
-                  >
-                    #{chip}
-                  </span>
-                ))}
-              </div>
-
-              {/* SVG Orbital Telemetry Arc + 3-Layer Acoustic Wave Ribbon */}
-              <div
-                style={{
-                  height: 32,
-                  width: "min(360px, 100%)",
-                  position: "relative",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <svg
-                  width="100%"
-                  height="32"
-                  viewBox="0 0 360 32"
-                  fill="none"
-                  style={{ overflow: "visible" }}
-                >
-                  {/* Subtle Orbital Background Arc */}
-                  <path
-                    d="M 10 24 Q 180 6 350 24"
-                    stroke="rgba(255,255,255,0.08)"
-                    strokeWidth="1"
-                    fill="none"
-                  />
-                  {/* Layer 1: Ambient baseline ribbon */}
-                  <path
-                    d={`M 20 20 Q 90 ${
-                      16 - audioVolume * 14
-                    } 180 16 T 340 20`}
-                    stroke={stateInfo.color}
-                    strokeWidth="1.5"
-                    strokeOpacity={0.7}
-                    fill="none"
-                    strokeDasharray="4 4"
-                    style={{
-                      animation: "waveRibbonA 3s linear infinite",
-                      transition: "stroke 0.3s ease",
-                    }}
-                  />
-                  {/* Layer 2: Main dynamic frequency wave */}
-                  <path
-                    d={`M 15 22 Q 100 ${
-                      22 + audioVolume * 18
-                    } 180 18 T 345 22`}
-                    stroke={stateInfo.color}
-                    strokeWidth="2"
-                    strokeOpacity={0.9}
-                    fill="none"
-                    style={{
-                      filter: `drop-shadow(0 0 6px ${stateInfo.glow})`,
-                      transition: "stroke 0.3s ease",
-                    }}
-                  />
-                  {/* Layer 3: Secondary acoustic phase ribbon */}
-                  <path
-                    d={`M 30 18 Q 110 ${
-                      18 - audioVolume * 10
-                    } 190 20 T 330 18`}
-                    stroke="rgba(255,255,255,0.25)"
-                    strokeWidth="1"
-                    fill="none"
-                    strokeDasharray="3 3"
-                    style={{ animation: "waveRibbonB 4s linear infinite" }}
-                  />
-                </svg>
-              </div>
-            </div>
-
-            {/* Hovering Micu Centerpiece */}
-            <div
-              style={{
-                flex: "1 1 auto",
-                minHeight: 105,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                position: "relative",
-              }}
-            >
-              {/* Reactive Aura Behind Micu */}
-              <div
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  top: "50%",
-                  left: "50%",
-                  transform: `translate(-50%, -50%) scale(${
-                    1 + audioVolume * (tutorState === "speaking" ? 0.36 : 0.15)
-                  })`,
-                  pointerEvents: "none",
-                  transition:
-                    tutorState === "speaking"
-                      ? "transform 0.08s ease-out"
-                      : "transform 0.35s ease-out",
-                }}
-              >
-                {tutorState === "thinking" ? (
-                  <div
-                    style={{
-                      width: 180,
-                      height: 180,
-                      borderRadius: "50%",
-                      background:
-                        "conic-gradient(from 0deg, transparent 0%, #A855F7 50%, transparent 100%)",
-                      filter: "blur(20px)",
-                      animation: "rotateGlow 2.4s linear infinite",
-                      position: "absolute",
-                      top: "50%",
-                      left: "50%",
-                    }}
-                  />
-                ) : tutorState === "listening" ? (
-                  <div
-                    style={{
-                      width: 170,
-                      height: 170,
-                      borderRadius: "50%",
-                      background:
-                        "radial-gradient(circle, rgba(56,189,248,0.25) 0%, transparent 70%)",
-                      border: "1.5px solid rgba(56, 189, 248, 0.45)",
-                      boxShadow: "0 0 25px rgba(56, 189, 248, 0.35)",
-                      animation: "pulseRing 1.8s ease-in-out infinite",
-                      position: "absolute",
-                      top: "50%",
-                      left: "50%",
-                    }}
-                  />
-                ) : tutorState === "speaking" ? (
-                  <>
-                    <div
-                      style={{
-                        width: 180,
-                        height: 180,
-                        borderRadius: "50%",
-                        background: `radial-gradient(circle, rgba(198,244,50,${
-                          0.18 + audioVolume * 0.35
-                        }) 0%, transparent 70%)`,
-                        filter: "blur(14px)",
-                        position: "absolute",
-                        top: "50%",
-                        left: "50%",
-                        transform: "translate(-50%, -50%)",
-                      }}
-                    />
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: "50%",
-                        left: "50%",
-                        width: 200 + audioVolume * 40,
-                        height: 200 + audioVolume * 40,
-                        transform: "translate(-50%, -50%)",
-                        borderRadius: "50%",
-                        border: `1.5px solid rgba(198, 244, 50, ${
-                          0.25 + audioVolume * 0.5
-                        })`,
-                        boxShadow: "0 0 20px rgba(198, 244, 50, 0.25)",
-                        transition: "all 0.08s ease-out",
-                      }}
-                    />
-                  </>
-                ) : (
-                  <div
-                    style={{
-                      width: 150,
-                      height: 150,
-                      borderRadius: "50%",
-                      background:
-                        "radial-gradient(circle, rgba(198, 244, 50, 0.05) 0%, transparent 70%)",
-                      filter: "blur(16px)",
-                      position: "absolute",
-                      top: "50%",
-                      left: "50%",
-                      transform: "translate(-50%, -50%)",
-                    }}
-                  />
-                )}
-              </div>
-
-              {/* Responsively Clamped Lottie Centerpiece */}
-              <div
-                style={{
-                  position: "relative",
-                  zIndex: 10,
-                  width: modeType === "test" ? 110 : "clamp(115px, 20vh, 185px)",
-                  height: modeType === "test" ? 110 : "clamp(115px, 20vh, 185px)",
-                  animation: "micuFloat 4s ease-in-out infinite alternate",
-                  transition: "width 0.3s ease, height 0.3s ease",
-                }}
-              >
-                <DotLottieReact
-                  src="/micu.lottie"
-                  loop
-                  autoplay
-                  style={{ width: "100%", height: "100%" }}
-                />
-              </div>
-
-              {/* Compact Status Pill */}
-              <div
-                style={{
-                  marginTop: 4,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  padding: "2px 9px",
-                  borderRadius: 999,
-                  background: "rgba(14, 15, 18, 0.8)",
-                  backdropFilter: "blur(16px)",
-                  border: `1px solid ${stateInfo.glow}`,
-                  color: stateInfo.color,
-                  fontSize: 9.5,
-                  fontFamily: "ui-monospace, monospace",
-                  letterSpacing: "1px",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  boxShadow: `0 0 10px ${stateInfo.glow}`,
-                  zIndex: 10,
-                }}
-              >
-                {tutorState === "speaking" && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 2, height: 9 }}>
-                    <span style={{ width: 2, background: "#C6F432", borderRadius: 1, animation: "soundwaveBar 0.5s infinite ease-in-out" }} />
-                    <span style={{ width: 2, background: "#C6F432", borderRadius: 1, animation: "soundwaveBar 0.5s infinite ease-in-out 0.15s" }} />
-                    <span style={{ width: 2, background: "#C6F432", borderRadius: 1, animation: "soundwaveBar 0.5s infinite ease-in-out 0.3s" }} />
-                  </div>
-                )}
-                <span>● {stateInfo.label}</span>
-              </div>
-            </div>
-
-            {/* Floating Teleprompter / Inline Quiz Surface */}
-            <div
-              role="region"
-              aria-live="polite"
-              style={{
-                flexShrink: 0,
-                maxWidth: 680,
-                width: "100%",
-                margin: "0 auto",
-                maxHeight: modeType === "test" ? 210 : 145,
-                overflowY: "auto",
-                scrollbarWidth: "thin",
-                background: "rgba(14, 15, 18, 0.72)",
-                backdropFilter: "blur(22px)",
-                WebkitBackdropFilter: "blur(22px)",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                borderRadius: 18,
-                padding: "12px 18px",
-                display: "flex",
-                flexDirection: "column",
-                gap: 7,
-                boxShadow:
-                  "0 18px 48px rgba(0, 0, 0, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.08)",
-                zIndex: 10,
-                transition: "all 0.25s ease",
-              }}
-            >
-              {/* Header Row in Teleprompter */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  paddingBottom: 4,
-                  borderBottom: "1px solid rgba(255, 255, 255, 0.06)",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span
-                    style={{
-                      width: 5,
-                      height: 5,
-                      borderRadius: "50%",
-                      background: stateInfo.color,
-                      boxShadow: `0 0 6px ${stateInfo.color}`,
-                    }}
-                  />
-                  <span
-                    style={{
-                      fontSize: 10,
-                      fontFamily: "ui-monospace, monospace",
-                      color: "rgba(255, 255, 255, 0.5)",
-                      letterSpacing: "0.8px",
-                      fontWeight: 600,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    {activeNode?.title}
-                  </span>
-                </div>
-
-                {modeType === "test" && (
-                  <button
-                    onClick={() => {
-                      setModeType("standard");
-                      setTestSelected(null);
-                      setTutorState("idle");
-                      const initial = `${activeNode.title}. ${activeNode.summary}`;
-                      setActiveText(initial);
-                      setRevealedWordIndex(initial.split(" ").length);
-                    }}
-                    aria-label="Exit quiz mode"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4,
-                      padding: "2px 7px",
-                      borderRadius: 999,
-                      background: "rgba(255, 255, 255, 0.06)",
-                      border: "1px solid rgba(255, 255, 255, 0.1)",
-                      color: "rgba(255, 255, 255, 0.6)",
-                      fontSize: 10,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <X size={11} />
-                    <span>Exit Quiz</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Body: Quiz Mode (2x2 Grid) or Teleprompter Captions */}
-              {modeType === "test" && quiz ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: 13,
-                      lineHeight: 1.4,
-                      color: "rgba(255,255,255,0.92)",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {quiz.question}
-                  </p>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: 6,
-                    }}
-                  >
-                    {quiz.options.map((opt, idx) => {
-                      const isChosen = testSelected === idx;
-                      const isCorrect =
-                        testSelected !== null && idx === quiz.correctIndex;
-                      const isWrong = isChosen && idx !== quiz.correctIndex;
-
-                      return (
-                        <button
-                          key={idx}
-                          disabled={testSelected !== null}
-                          onClick={() => handleAnswerTest(idx)}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 7,
-                            padding: "7px 10px",
-                            borderRadius: 9,
-                            background: isCorrect
-                              ? "rgba(16, 185, 129, 0.2)"
-                              : isWrong
-                                ? "rgba(244, 66, 50, 0.2)"
-                                : "rgba(255, 255, 255, 0.05)",
-                            border: `1px solid ${
-                              isCorrect
-                                ? "#10B981"
-                                : isWrong
-                                  ? "#F44232"
-                                  : "rgba(255, 255, 255, 0.1)"
-                            }`,
-                            color: isCorrect
-                              ? "#10B981"
-                              : isWrong
-                                ? "#F44232"
-                                : "#fff",
-                            fontSize: 11,
-                            textAlign: "left",
-                            cursor:
-                              testSelected === null ? "pointer" : "default",
-                            transition: "all 0.15s ease",
-                          }}
-                        >
-                          <span
-                            style={{
-                              width: 17,
-                              height: 17,
-                              display: "grid",
-                              placeItems: "center",
-                              borderRadius: 4,
-                              background: "rgba(0,0,0,0.35)",
-                              fontSize: 9,
-                              fontFamily: "ui-monospace, monospace",
-                              fontWeight: 700,
-                              flexShrink: 0,
-                            }}
-                          >
-                            {String.fromCharCode(65 + idx)}
-                          </span>
-                          <span style={{ flex: 1, lineHeight: 1.3 }}>{opt}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {testSelected !== null && (
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        paddingTop: 2,
-                        fontSize: 11,
-                        color:
-                          testSelected === quiz.correctIndex
-                            ? "#10B981"
-                            : "#F44232",
-                      }}
-                    >
-                      <span>
-                        {testSelected === quiz.correctIndex
-                          ? "✓ Correct answer!"
-                          : `✕ Explanation: ${quiz.explanation}`}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* High-Contrast Teleprompter Captions */
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 13.5,
-                    lineHeight: 1.55,
-                    fontWeight: 450,
-                    letterSpacing: "-0.15px",
-                  }}
-                >
-                  {tutorState === "thinking" ? (
-                    <span
-                      style={{
-                        color: "#A855F7",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        fontSize: 12.5,
-                      }}
-                    >
-                      <Loader2 size={13} className="animate-spin" />
-                      <span>{activeText}</span>
-                    </span>
-                  ) : (
-                    words.map((word, wIdx) => {
-                      const isSpoken = wIdx < revealedWordIndex;
-                      const isActive =
-                        tutorState === "speaking" && wIdx === revealedWordIndex;
-
-                      return (
-                        <span
-                          key={wIdx}
-                          style={{
-                            color: isActive
-                              ? "#C6F432"
-                              : isSpoken
-                                ? "#F4F4F5"
-                                : "rgba(244, 244, 245, 0.55)",
-                            fontWeight: isActive ? 600 : 450,
-                            textShadow: isActive
-                              ? "0 0 12px rgba(198,244,50,0.7)"
-                              : "none",
-                            transition: "color 0.12s ease",
-                            display: "inline-block",
-                            marginRight: 4,
-                          }}
-                        >
-                          {word}
-                        </span>
-                      );
-                    })
-                  )}
-                </p>
-              )}
-
-              {statusMessage && (
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 10,
-                    color: "#F4A232",
-                    fontFamily: "ui-monospace, monospace",
-                  }}
-                >
-                  {statusMessage}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* ── Right Peripheral Cluster (Live Spectrum + Speed + AR Jump) ── */}
-          <aside
-            className={`micu-peripheral-cluster ${isDimmed ? "dimmed" : ""}`}
-            style={{
-              background: "rgba(255, 255, 255, 0.025)",
-              border: "1px solid rgba(255, 255, 255, 0.07)",
-              borderRadius: 20,
-              padding: "16px",
-              backdropFilter: "blur(18px)",
-              WebkitBackdropFilter: "blur(18px)",
-              height: "calc(100% - 10px)",
-              maxHeight: 440,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              overflow: "hidden",
-            }}
-          >
-            {/* Live 12-Bar Audio Spectrum */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  fontSize: 10.5,
-                  fontFamily: "ui-monospace, monospace",
-                  fontWeight: 700,
-                  color: "rgba(255, 255, 255, 0.5)",
-                  letterSpacing: "0.8px",
-                  textTransform: "uppercase",
-                }}
-              >
-                <Radio size={12} style={{ color: stateInfo.color }} />
-                <span>Audio Spectrum</span>
-              </div>
-
-              {/* 12-Bar Visualizer Container */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "flex-end",
-                  gap: 4,
-                  height: 38,
-                  padding: "6px 10px",
-                  borderRadius: 10,
-                  background: "rgba(0, 0, 0, 0.35)",
-                  border: "1px solid rgba(255, 255, 255, 0.06)",
-                }}
-              >
-                {spectrumBars.map((val, idx) => (
-                  <span
-                    key={idx}
-                    style={{
-                      flex: 1,
-                      height: `${Math.max(10, Math.min(100, val * 100))}%`,
-                      background:
-                        tutorState === "speaking"
-                          ? "#C6F432"
-                          : tutorState === "listening"
-                            ? "#38BDF8"
-                            : tutorState === "thinking"
-                              ? "#A855F7"
-                              : "rgba(255, 255, 255, 0.25)",
-                      borderRadius: 2,
-                      transition: "height 0.08s ease-out, background 0.2s ease",
-                      boxShadow:
-                        tutorState === "speaking"
-                          ? "0 0 6px rgba(198, 244, 50, 0.5)"
-                          : "none",
-                    }}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Voice Speed Toggle (0.9x, 1.0x, 1.2x) */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  fontSize: 10.5,
-                  fontFamily: "ui-monospace, monospace",
-                  fontWeight: 700,
-                  color: "rgba(255, 255, 255, 0.5)",
-                  letterSpacing: "0.8px",
-                  textTransform: "uppercase",
-                }}
-              >
-                <Sliders size={12} />
-                <span>Voice Speed</span>
-              </div>
-
-              <div
-                style={{
-                  display: "flex",
-                  gap: 6,
-                  background: "rgba(0, 0, 0, 0.3)",
-                  padding: 3,
-                  borderRadius: 10,
-                  border: "1px solid rgba(255, 255, 255, 0.06)",
-                }}
-              >
-                {[0.9, 1.0, 1.2].map((spd) => {
-                  const isCurrent = speechSpeed === spd;
-                  return (
-                    <button
-                      key={spd}
-                      onClick={() => {
-                        setSpeechSpeed(spd);
-                        if (audioSourceRef.current) {
-                          audioSourceRef.current.playbackRate.value = spd;
-                        }
-                      }}
-                      style={{
-                        flex: 1,
-                        padding: "4px 0",
-                        borderRadius: 7,
-                        background: isCurrent
-                          ? "rgba(198, 244, 50, 0.2)"
-                          : "transparent",
-                        border: isCurrent
-                          ? "1px solid rgba(198, 244, 50, 0.45)"
-                          : "1px solid transparent",
-                        color: isCurrent ? "#C6F432" : "rgba(255, 255, 255, 0.6)",
-                        fontSize: 11,
-                        fontFamily: "ui-monospace, monospace",
-                        fontWeight: 650,
-                        cursor: "pointer",
-                        transition: "all 0.15s ease",
-                      }}
-                    >
-                      {spd.toFixed(1)}×
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Quick Action: Jump to AR Practice */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              History ({historyLog.length})
+            </button>
+            {onJumpToAR && (
               <button
+                className="mts-ghost-btn"
                 onClick={onJumpToAR}
-                aria-label="Jump to AR Practice in Gesture Synth"
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 7,
-                  padding: "9px 12px",
-                  borderRadius: 12,
-                  background: "rgba(198, 244, 50, 0.12)",
-                  border: "1px solid rgba(198, 244, 50, 0.35)",
-                  color: "#C6F432",
-                  fontSize: 11.5,
-                  fontWeight: 650,
-                  cursor: "pointer",
-                  transition: "all 0.18s ease",
-                  boxShadow: "0 4px 16px rgba(198, 244, 50, 0.1)",
-                }}
+                aria-label="Practice in AR"
               >
-                <Compass size={13} />
-                <span>Jump to AR Practice →</span>
+                Practice in AR →
               </button>
-            </div>
-          </aside>
-        </div>
-
-        {/* ── ROW 3: Single-Row Floating Glass Command Island ──────────────── */}
-        <div
-          style={{
-            flexShrink: 0,
-            margin: "0 auto",
-            zIndex: 10,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "7px 12px",
-              borderRadius: 999,
-              background: "rgba(14, 15, 18, 0.84)",
-              backdropFilter: "blur(24px)",
-              WebkitBackdropFilter: "blur(24px)",
-              border: "1px solid rgba(255, 255, 255, 0.12)",
-              boxShadow: "0 10px 40px rgba(0, 0, 0, 0.65)",
-            }}
-          >
-            {/* Primary Action: Explain / Stop */}
-            <button
-              onClick={() => {
-                if (tutorState === "speaking" || tutorState === "thinking") {
-                  stopSpeech();
-                  setTutorState("idle");
-                } else {
-                  setModeType("standard");
-                  setTestSelected(null);
-                  speakText(`${activeNode.title}. ${activeNode.summary}`);
-                }
-              }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "7px 15px",
-                borderRadius: 999,
-                background:
-                  tutorState === "speaking"
-                    ? "rgba(244, 66, 50, 0.18)"
-                    : "#C6F432",
-                border:
-                  tutorState === "speaking"
-                    ? "1px solid rgba(244, 66, 50, 0.5)"
-                    : "1px solid transparent",
-                color: tutorState === "speaking" ? "#F44232" : "#0B0B0C",
-                fontSize: 12.5,
-                fontWeight: 650,
-                cursor: "pointer",
-                transition: "all 0.18s ease",
-              }}
-            >
-              {tutorState === "thinking" ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : tutorState === "speaking" ? (
-                <VolumeX size={14} />
-              ) : (
-                <Volume2 size={14} />
-              )}
-              <span>{tutorState === "speaking" ? "Stop" : "Explain"}</span>
-            </button>
-
-            {/* Push-to-Talk Mic: 🎙️ Ask */}
-            <button
-              onClick={toggleListening}
-              aria-label={
-                tutorState === "listening" ? "Stop listening" : "Ask Micu"
-              }
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                padding: "7px 13px",
-                borderRadius: 999,
-                background:
-                  tutorState === "listening"
-                    ? "rgba(56, 189, 248, 0.2)"
-                    : "rgba(255, 255, 255, 0.08)",
-                border:
-                  tutorState === "listening"
-                    ? "1px solid rgba(56, 189, 248, 0.55)"
-                    : "1px solid rgba(255, 255, 255, 0.1)",
-                color: tutorState === "listening" ? "#38BDF8" : "#fff",
-                fontSize: 12,
-                fontWeight: 600,
-                cursor: "pointer",
-                transition: "all 0.18s ease",
-              }}
-            >
-              {tutorState === "listening" ? (
-                <MicOff size={13} style={{ color: "#38BDF8" }} />
-              ) : (
-                <Mic size={13} style={{ color: "#C6F432" }} />
-              )}
-              <span>{tutorState === "listening" ? "Listening…" : "Ask"}</span>
-            </button>
-
-            {/* Keyboard Question Toggle: ⌨️ */}
-            <button
-              onClick={() => setShowKeyInput((v) => !v)}
-              aria-label="Type question"
-              style={{
-                width: 32,
-                height: 32,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: "50%",
-                background: showKeyInput
-                  ? "rgba(198, 244, 50, 0.2)"
-                  : "rgba(255, 255, 255, 0.08)",
-                border: showKeyInput
-                  ? "1px solid rgba(198, 244, 50, 0.5)"
-                  : "1px solid rgba(255, 255, 255, 0.1)",
-                color: showKeyInput ? "#C6F432" : "rgba(255, 255, 255, 0.65)",
-                cursor: "pointer",
-                transition: "all 0.18s ease",
-              }}
-            >
-              <Keyboard size={13} />
-            </button>
-
-            {/* Subtle Vertical Divider */}
-            <div
-              aria-hidden="true"
-              style={{
-                width: 1,
-                height: 18,
-                background: "rgba(255, 255, 255, 0.14)",
-              }}
-            />
-
-            {/* Quick Chips: Simply, Analogy, Test me */}
-            <button
-              onClick={handleExplainSimply}
-              aria-label="Explain simply"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                padding: "6px 11px",
-                borderRadius: 999,
-                background:
-                  modeType === "simple"
-                    ? "rgba(198, 244, 50, 0.15)"
-                    : "rgba(255, 255, 255, 0.06)",
-                border: `1px solid ${
-                  modeType === "simple"
-                    ? "rgba(198, 244, 50, 0.45)"
-                    : "rgba(255, 255, 255, 0.08)"
-                }`,
-                color: modeType === "simple" ? "#C6F432" : "rgba(255,255,255,0.75)",
-                fontSize: 11.5,
-                fontWeight: 500,
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <Sparkles size={12} style={{ color: "#C6F432" }} />
-              <span>Simply</span>
-            </button>
-
-            <button
-              onClick={handleAnalogy}
-              aria-label="Real-world analogy"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                padding: "6px 11px",
-                borderRadius: 999,
-                background:
-                  modeType === "analogy"
-                    ? "rgba(56, 189, 248, 0.15)"
-                    : "rgba(255, 255, 255, 0.06)",
-                border: `1px solid ${
-                  modeType === "analogy"
-                    ? "rgba(56, 189, 248, 0.45)"
-                    : "rgba(255, 255, 255, 0.08)"
-                }`,
-                color: modeType === "analogy" ? "#38BDF8" : "rgba(255,255,255,0.75)",
-                fontSize: 11.5,
-                fontWeight: 500,
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <Lightbulb size={12} style={{ color: "#38BDF8" }} />
-              <span>Analogy</span>
-            </button>
-
-            <button
-              onClick={handleTestMe}
-              aria-label="Test me on this concept"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
-                padding: "6px 11px",
-                borderRadius: 999,
-                background:
-                  modeType === "test"
-                    ? "rgba(168, 85, 247, 0.15)"
-                    : "rgba(255, 255, 255, 0.06)",
-                border: `1px solid ${
-                  modeType === "test"
-                    ? "rgba(168, 85, 247, 0.45)"
-                    : "rgba(255, 255, 255, 0.08)"
-                }`,
-                color: modeType === "test" ? "#A855F7" : "rgba(255,255,255,0.75)",
-                fontSize: 11.5,
-                fontWeight: 500,
-                cursor: "pointer",
-                transition: "all 0.15s ease",
-              }}
-            >
-              <Brain size={12} style={{ color: "#A855F7" }} />
-              <span>Test me</span>
-            </button>
-
-            {/* Smooth Inline Expandable Text Input */}
-            {showKeyInput && (
-              <form
-                onSubmit={handleTypedSubmit}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  paddingLeft: 8,
-                  marginLeft: 4,
-                  borderLeft: "1px solid rgba(255, 255, 255, 0.15)",
-                }}
-              >
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={typedQuestion}
-                  onChange={(e) => setTypedQuestion(e.target.value)}
-                  placeholder={`Ask Micu anything about ${activeNode?.title}…`}
-                  style={{
-                    width: 200,
-                    background: "rgba(0,0,0,0.3)",
-                    border: "1px solid rgba(198, 244, 50, 0.35)",
-                    borderRadius: 999,
-                    padding: "4px 10px",
-                    color: "#fff",
-                    fontSize: 11.5,
-                    outline: "none",
-                  }}
-                />
-                <button
-                  type="submit"
-                  disabled={!typedQuestion.trim()}
-                  aria-label="Send query"
-                  style={{
-                    width: 26,
-                    height: 26,
-                    borderRadius: "50%",
-                    background: typedQuestion.trim()
-                      ? "#C6F432"
-                      : "rgba(255, 255, 255, 0.1)",
-                    border: "none",
-                    color: typedQuestion.trim() ? "#0B0B0C" : "rgba(255,255,255,0.4)",
-                    display: "grid",
-                    placeItems: "center",
-                    cursor: typedQuestion.trim() ? "pointer" : "default",
-                  }}
-                >
-                  <Send size={11} />
-                </button>
-              </form>
             )}
           </div>
-        </div>
 
-        {/* ── Slide-Over Transcript Drawer ─────────────────────────────────── */}
-        {showHistory && (
-          <div
-            role="dialog"
-            aria-label="Session history"
-            style={{
-              position: "absolute",
-              top: 56,
-              right: 20,
-              bottom: 80,
-              width: 310,
-              backdropFilter: "blur(24px)",
-              WebkitBackdropFilter: "blur(24px)",
-              background: "rgba(14, 15, 18, 0.94)",
-              border: "1px solid rgba(255, 255, 255, 0.12)",
-              borderRadius: 18,
-              zIndex: 40,
-              boxShadow: "0 20px 50px rgba(0, 0, 0, 0.75)",
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-            }}
-          >
-            {/* Drawer Header */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "12px 16px",
-                borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <MessageSquare size={14} style={{ color: "#C6F432" }} />
-                <span style={{ fontSize: 13, fontWeight: 650, color: "#fff" }}>
-                  Session History
-                </span>
-              </div>
-              <button
-                onClick={() => setShowHistory(false)}
-                aria-label="Close history"
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "rgba(255, 255, 255, 0.5)",
-                  cursor: "pointer",
-                  display: "grid",
-                  placeItems: "center",
-                }}
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            {/* Drawer Items */}
-            <div
-              style={{
-                flex: 1,
-                overflowY: "auto",
-                padding: "12px 14px",
-                display: "flex",
-                flexDirection: "column",
-                gap: 10,
-                scrollbarWidth: "thin",
-              }}
-            >
-              {historyLog.length === 0 ? (
+          {/* Row 2 — Center stage */}
+          <div className="mts-stage">
+            {!quizMode ? (
+              /* ── Explanation View ─────────────────────────────────────────── */
+              <>
+                {/* Concept title + mastery hairline */}
                 <div
                   style={{
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
-                    justifyContent: "center",
-                    height: "100%",
-                    color: "rgba(255, 255, 255, 0.4)",
-                    fontSize: 12,
-                    textAlign: "center",
-                    padding: "0 20px",
+                    gap: 8,
                   }}
                 >
-                  <History size={24} style={{ opacity: 0.35, marginBottom: 8 }} />
-                  <p style={{ margin: 0 }}>
-                    No conversations yet. Ask Micu questions or click Explain to start logging!
-                  </p>
+                  <h2 className="mts-concept-title-text">
+                    {activeNode?.title ?? "Select a concept"}
+                  </h2>
+                  <div className="mts-hairline">
+                    <div
+                      className="mts-hairline-fill"
+                      style={{ width: `${currentMastery}%` }}
+                    />
+                  </div>
                 </div>
-              ) : (
-                historyLog.map((item) => (
-                  <div
-                    key={item.id}
-                    style={{
-                      background: "rgba(255, 255, 255, 0.04)",
-                      border: "1px solid rgba(255, 255, 255, 0.07)",
-                      borderRadius: 12,
-                      padding: "10px 12px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 6,
-                    }}
-                  >
+
+                {/* Ephemeral native dark-zinc status pill */}
+                <div
+                  style={{
+                    minHeight: 32,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {loadingTask && (
                     <div
                       style={{
-                        display: "flex",
+                        display: "inline-flex",
                         alignItems: "center",
-                        justifyContent: "space-between",
-                        fontSize: 10,
-                        fontFamily: "ui-monospace, monospace",
-                        color: "rgba(255, 255, 255, 0.45)",
+                        gap: 7,
+                        background: "#18181B",
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        borderRadius: 999,
+                        padding: "5px 14px",
+                        fontSize: 12,
+                        color: "#F4F4F5",
                       }}
                     >
                       <span
                         style={{
-                          padding: "1px 6px",
-                          borderRadius: 4,
-                          background: "rgba(198, 244, 50, 0.12)",
-                          color: "#C6F432",
-                          fontWeight: 600,
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          background: "#C6F432",
+                          animation: "pulseDot 1.4s infinite ease-in-out",
                         }}
-                      >
-                        {item.conceptTitle}
-                      </span>
-                      <span>{item.time}</span>
+                      />
+                      <span>{loadingTask}</span>
                     </div>
-
-                    <p
+                  )}
+                  {hasError && !loadingTask && (
+                    <div
                       style={{
-                        margin: 0,
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: "#fff",
-                      }}
-                    >
-                      "{item.query}"
-                    </p>
-
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: 11.5,
-                        color: "rgba(255, 255, 255, 0.72)",
-                        lineHeight: 1.45,
-                      }}
-                    >
-                      {item.reply}
-                    </p>
-
-                    <button
-                      onClick={() => speakText(item.reply)}
-                      style={{
-                        alignSelf: "flex-end",
-                        display: "flex",
+                        display: "inline-flex",
                         alignItems: "center",
-                        gap: 4,
-                        padding: "2px 8px",
-                        borderRadius: 6,
-                        background: "rgba(255, 255, 255, 0.06)",
-                        border: "1px solid rgba(255, 255, 255, 0.1)",
-                        color: "#C6F432",
-                        fontSize: 10.5,
-                        cursor: "pointer",
+                        gap: 7,
+                        background: "rgba(239,68,68,0.12)",
+                        border: "1px solid rgba(239,68,68,0.25)",
+                        borderRadius: 999,
+                        padding: "5px 14px",
+                        fontSize: 12,
+                        color: "#fca5a5",
                       }}
                     >
-                      <Volume2 size={11} />
-                      <span>Replay</span>
-                    </button>
+                      <span>Failed to generate response</span>
+                      {lastAction && (
+                        <button
+                          onClick={lastAction}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "#FAFAFA",
+                            textDecoration: "underline",
+                            cursor: "pointer",
+                            fontSize: 12,
+                            padding: 0,
+                          }}
+                        >
+                          Retry
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Micu + audio-reactive aura */}
+                <div className="mts-micu-wrap">
+                  <div
+                    className="mts-aura"
+                    style={{
+                      width: `calc(${micuSize} * ${1 + audioVolume * 0.55})`,
+                      height: `calc(${micuSize} * ${1 + audioVolume * 0.55})`,
+                      background: micuGlow,
+                    }}
+                  />
+                  <div className="mts-micu-inner">
+                    <DotLottieReact
+                      src="/micu.lottie"
+                      loop
+                      autoplay
+                      style={{
+                        width: micuSize,
+                        height: micuSize,
+                      }}
+                    />
                   </div>
-                ))
+                </div>
+
+                {/* State caption */}
+                <p className="mts-state-caption">
+                  {STATE_LABEL[tutorState] ?? "Ready"}
+                </p>
+
+                {/* Auto-scrolling borderless teleprompter */}
+                {activeText && (
+                  <div ref={teleprompterRef} className="mts-teleprompter">
+                    {words.map((word, wi) => {
+                      const isSpoken = wi < revealedWordIndex;
+                      const isActive = wi === revealedWordIndex;
+                      return (
+                        <span
+                          key={wi}
+                          ref={isActive ? activeWordRef : undefined}
+                          style={{
+                            color: isActive
+                              ? "#C6F432"
+                              : isSpoken
+                              ? "#F4F4F5"
+                              : "rgba(244,244,245,0.38)",
+                            transition: "color 0.12s",
+                          }}
+                        >
+                          {word}{" "}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            ) : (
+              /* ── Quiz View ────────────────────────────────────────────────── */
+              <>
+                {/* Compact quiz header */}
+                <div className="mts-quiz-header">
+                  <div style={{ flexShrink: 0 }}>
+                    <DotLottieReact
+                      src="/micu.lottie"
+                      loop
+                      autoplay
+                      style={{ width: 52, height: 52 }}
+                    />
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: "#F4F4F5",
+                      flex: 1,
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {activeNode?.title}
+                  </span>
+                  <button
+                    className="mts-ghost-btn"
+                    onClick={exitQuiz}
+                    aria-label="Exit quiz"
+                    style={{ flexShrink: 0 }}
+                  >
+                    × Exit
+                  </button>
+                </div>
+
+                {/* Quiz card */}
+                <div className="mts-quiz-card">
+                  <p
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: "#F4F4F5",
+                      lineHeight: 1.45,
+                      margin: 0,
+                    }}
+                  >
+                    {quiz?.question ?? "No quiz available for this concept."}
+                  </p>
+
+                  {quiz && (
+                    <>
+                      <div className="mts-quiz-opts">
+                        {quiz.options.map((opt, oi) => {
+                          const labels = ["A", "B", "C", "D"];
+                          const isSelected = quizSelected === oi;
+                          const isCorrectOpt = oi === quiz.correctIndex;
+                          const answered = quizSelected !== null;
+                          let cls = "mts-quiz-opt";
+                          if (answered) {
+                            if (isCorrectOpt) cls += " correct";
+                            else if (isSelected) cls += " wrong";
+                            else cls += " neutral-after";
+                          }
+                          return (
+                            <button
+                              key={oi}
+                              className={cls}
+                              disabled={answered}
+                              onClick={() => handleAnswerQuiz(oi)}
+                            >
+                              <span className="mts-opt-label">
+                                {labels[oi]}
+                              </span>
+                              <span>{opt}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {quizFeedback && (
+                        <div className="mts-quiz-feedback">{quizFeedback}</div>
+                      )}
+
+                      <div className="mts-quiz-footer">
+                        <button
+                          className="mts-ghost-btn"
+                          onClick={exitQuiz}
+                        >
+                          Back to tutor
+                        </button>
+                        {quizSelected !== null && (
+                          <button
+                            className="mts-dock-btn primary"
+                            style={{ borderRadius: 9, fontSize: 13 }}
+                            onClick={nextConcept}
+                          >
+                            Next concept →
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Row 3 — Floating command dock container */}
+          <div className="mts-dock-container">
+            {/* Floating text input when keyboard mode is ON */}
+            {showKeyInput && (
+              <form
+                onSubmit={handleTypedSubmit}
+                style={{
+                  width: "100%",
+                  maxWidth: 520,
+                  marginBottom: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  background: "#18181B",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: 14,
+                  padding: "5px 8px 5px 14px",
+                  boxShadow: "0 8px 30px rgba(0,0,0,0.5)",
+                  backdropFilter: "blur(20px)",
+                }}
+              >
+                <input
+                  ref={inputRef}
+                  value={typedQuestion}
+                  onChange={(e) => setTypedQuestion(e.target.value)}
+                  placeholder="Ask Micu anything… (Enter to send, Esc to close)"
+                  style={{
+                    flex: 1,
+                    background: "transparent",
+                    border: "none",
+                    outline: "none",
+                    color: "#F4F4F5",
+                    fontSize: 13,
+                    minWidth: 0,
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setShowKeyInput(false);
+                      setTypedQuestion("");
+                    }
+                  }}
+                />
+                <button
+                  type="submit"
+                  style={{
+                    background: "#C6F432",
+                    color: "#0B0B0C",
+                    border: "none",
+                    borderRadius: 8,
+                    padding: "5px 11px",
+                    fontSize: 12,
+                    fontWeight: 650,
+                    cursor: "pointer",
+                  }}
+                >
+                  Send
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowKeyInput(false);
+                    setTypedQuestion("");
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#71717A",
+                    fontSize: 14,
+                    cursor: "pointer",
+                    padding: "4px 8px",
+                  }}
+                >
+                  ×
+                </button>
+              </form>
+            )}
+
+            {/* Single-row floating dock */}
+            <div className="mts-dock">
+              {/* Primary action */}
+              {tutorState === "speaking" ? (
+                <button
+                  className="mts-dock-btn stop-btn"
+                  onClick={() => {
+                    stopSpeech();
+                    setTutorState("idle");
+                  }}
+                >
+                  ⏹ Stop
+                </button>
+              ) : (
+                <button className="mts-dock-btn primary" onClick={handleExplain}>
+                  Explain
+                </button>
               )}
+
+              {/* Ask voice button with clean 15px SVG mic icon */}
+              <button
+                className={`mts-dock-btn${
+                  tutorState === "listening" ? " active" : ""
+                }`}
+                onClick={toggleListening}
+                title="Voice question"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="22" />
+                </svg>
+                <span>{tutorState === "listening" ? "Listening…" : "Ask"}</span>
+              </button>
+
+              {/* Keyboard toggle */}
+              <button
+                className={`mts-dock-btn${showKeyInput ? " active" : ""}`}
+                onClick={() => setShowKeyInput((v) => !v)}
+                title="Type question"
+              >
+                ⌨️
+              </button>
+
+              <div className="mts-dock-sep" />
+
+              {/* Secondary actions */}
+              <button
+                className="mts-dock-btn"
+                onClick={() => requestMicuAI("simple")}
+                disabled={tutorState === "thinking"}
+              >
+                Simplify
+              </button>
+              <button
+                className="mts-dock-btn"
+                onClick={() => requestMicuAI("analogy")}
+                disabled={tutorState === "thinking"}
+              >
+                Analogy
+              </button>
+              <button
+                className={`mts-dock-btn${quizMode ? " active" : ""}`}
+                onClick={quizMode ? exitQuiz : handleTestMe}
+              >
+                Test me
+              </button>
             </div>
           </div>
-        )}
+
+          {/* History slide-over drawer */}
+          {showHistory && (
+            <div className="mts-history-drawer">
+              <div
+                style={{
+                  padding: "14px 16px 10px",
+                  borderBottom: "1px solid rgba(255,255,255,0.07)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  flexShrink: 0,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#F4F4F5",
+                  }}
+                >
+                  Session History
+                </span>
+                <button
+                  className="mts-ghost-btn"
+                  onClick={() => setShowHistory(false)}
+                  style={{ padding: "3px 8px" }}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div
+                style={{
+                  flex: 1,
+                  overflowY: "auto",
+                  scrollbarWidth: "none",
+                  padding: "10px 12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                {historyLog.length === 0 ? (
+                  <p
+                    style={{
+                      fontSize: 12,
+                      color: "#71717A",
+                      textAlign: "center",
+                      marginTop: 20,
+                    }}
+                  >
+                    No history yet. Ask Micu something!
+                  </p>
+                ) : (
+                  historyLog.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                        borderRadius: 10,
+                        padding: "10px 12px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          marginBottom: 4,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: "#71717A",
+                            fontWeight: 500,
+                          }}
+                        >
+                          {item.conceptTitle}
+                        </span>
+                        <span style={{ fontSize: 11, color: "#71717A" }}>
+                          {item.time}
+                        </span>
+                      </div>
+                      <p
+                        style={{
+                          fontSize: 12,
+                          color: "#A1A1AA",
+                          margin: "0 0 4px",
+                          fontStyle: "italic",
+                        }}
+                      >
+                        "{item.query}"
+                      </p>
+                      <p
+                        style={{
+                          fontSize: 12,
+                          color: "rgba(244,244,245,0.75)",
+                          margin: 0,
+                          lineHeight: 1.5,
+                          display: "-webkit-box",
+                          WebkitLineClamp: 4,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {item.reply}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Native Clear History Ghost Button */}
+              {historyLog.length > 0 && (
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    borderTop: "1px solid rgba(255,255,255,0.07)",
+                    flexShrink: 0,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setHistoryLog([])}
+                    style={{
+                      width: "100%",
+                      padding: "7px 14px",
+                      borderRadius: 10,
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      background: "transparent",
+                      color: "#A1A1AA",
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      transition: "all 0.15s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = "#FAFAFA";
+                      e.currentTarget.style.background =
+                        "rgba(255,255,255,0.05)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = "#A1A1AA";
+                      e.currentTarget.style.background = "transparent";
+                    }}
+                  >
+                    Clear history
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Status message toast */}
+          {statusMessage && (
+            <div className="mts-status-msg" role="status">
+              {statusMessage}
+            </div>
+          )}
+        </div>
       </div>
     </>
   );

@@ -25,7 +25,7 @@ export function makeDeck(name: string, pairs: string[][]): Deck {
         id: `${name}:${i}`,
         title,
         summary,
-        retention: [82, 66, 94, 72, 58, 88][i % 6],
+        retention: [82, 54, 74, 38, 88, 62][i % 6],
         reviewDay: 0,
         lastReviewed: null,
         needsReview: false,
