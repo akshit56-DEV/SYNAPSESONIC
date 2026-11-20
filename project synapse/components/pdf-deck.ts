@@ -108,35 +108,40 @@ export async function pdfDeck(
       const ocrPages = Math.min(6, numPages);
       let ocrAccumulated = "";
 
-      const Tesseract = await import("tesseract.js");
+      const { createWorker } = await import("tesseract.js");
+      const worker = await createWorker("eng");
 
-      for (let p = 1; p <= ocrPages; p++) {
-        signal.throwIfAborted();
-        const statusMsg = `Scanned PDF detected — Running OCR on page ${p} of ${ocrPages}...`;
-        onStatus?.(statusMsg);
-
-        const page = await doc.getPage(p);
-        const viewport = page.getViewport({ scale: 1.5 });
-        const canvas = document.createElement("canvas");
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
-        const ctx = canvas.getContext("2d");
-
-        if (ctx) {
-          const renderTask = page.render({
-            canvas,
-            canvasContext: ctx,
-            viewport,
-          } as any);
-          await renderTask.promise;
+      try {
+        for (let p = 1; p <= ocrPages; p++) {
           signal.throwIfAborted();
+          const statusMsg = `Scanned PDF detected — Running OCR on page ${p} of ${ocrPages}...`;
+          onStatus?.(statusMsg);
 
-          const result = await Tesseract.recognize(canvas, "eng");
-          signal.throwIfAborted();
-          const recognized = result?.data?.text || "";
-          ocrAccumulated += recognized + "\n\n";
+          const page = await doc.getPage(p);
+          const viewport = page.getViewport({ scale: 1.2 });
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.floor(viewport.width);
+          canvas.height = Math.floor(viewport.height);
+          const ctx = canvas.getContext("2d");
+
+          if (ctx) {
+            const renderTask = page.render({
+              canvas,
+              canvasContext: ctx,
+              viewport,
+            } as any);
+            await renderTask.promise;
+            signal.throwIfAborted();
+
+            const result = await worker.recognize(canvas);
+            signal.throwIfAborted();
+            const recognized = result?.data?.text || "";
+            ocrAccumulated += recognized + "\n\n";
+          }
+          page.cleanup();
         }
-        page.cleanup();
+      } finally {
+        await worker.terminate();
       }
 
       if (ocrAccumulated.trim().length >= 40) {

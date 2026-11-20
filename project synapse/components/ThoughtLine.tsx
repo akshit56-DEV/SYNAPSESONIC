@@ -274,7 +274,7 @@ export default function ThoughtLine({
               {steps.map((text, i) => {
                 const done = !isWorking || i < steps.length - 1;
                 return (
-                  <div key={`${i}-${text}`} className="thought-line__step" data-done={done ? '' : undefined}>
+                  <div key={i} className="thought-line__step" data-done={done ? '' : undefined}>
                     <span className="thought-line__mark" aria-hidden="true">
                       {done ? (
                         <HugeiconsIcon icon={Tick02Icon} size="1em" strokeWidth={2.5}/>

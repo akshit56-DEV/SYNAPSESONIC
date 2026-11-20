@@ -148,7 +148,14 @@ export default function Workspace() {
           />
         ) : isLearnMode ? (
           /* ── Learn with Micu (mode 0): full-screen distraction-free tutor ─ */
-          <MicuTutorSpace recall={r} />
+          <MicuTutorSpace
+            recall={r}
+            isUploadOpen={importing}
+            onJumpToAR={() => {
+              void synth.start();
+              setMode(2);
+            }}
+          />
         ) : (
           <>
             <section className="context">

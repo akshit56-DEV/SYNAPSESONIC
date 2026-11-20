@@ -96,10 +96,10 @@ export function DeckImport({
         const scanStep = match ? `Scanning page ${match[1]} of ${match[2]}` : status;
 
         setProgressSteps((prev) => {
-          const lastIdx = prev.length - 1;
-          if (lastIdx >= 0 && prev[lastIdx].startsWith("Scanning page")) {
+          const scanIndex = prev.findIndex((s) => s.startsWith("Scanning page"));
+          if (scanIndex !== -1) {
             const next = [...prev];
-            next[lastIdx] = scanStep;
+            next[scanIndex] = scanStep;
             return next;
           }
           return [...prev, scanStep];
