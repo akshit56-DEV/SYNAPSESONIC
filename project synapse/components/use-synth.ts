@@ -5,10 +5,12 @@ export function useSynth() {
       ctx: AudioContext;
       osc: OscillatorNode;
       filter: BiquadFilterNode;
+      gain: GainNode;
       analyser: AnalyserNode;
       bytes: Uint8Array<ArrayBuffer>;
     } | null>(null),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [muted, setMuted] = useState(false);
   function stop() {
     const a = audio.current;
     audio.current = null;
@@ -16,6 +18,14 @@ export function useSynth() {
       a.osc.stop();
       void a.ctx.close().catch(() => {});
     }
+  }
+  function toggleMute() {
+    setMuted((m) => {
+      const next = !m;
+      const a = audio.current;
+      if (a) a.gain.gain.value = next ? 0 : 0.055;
+      return next;
+    });
   }
   async function start() {
     stop();
@@ -40,6 +50,7 @@ export function useSynth() {
         ctx,
         osc,
         filter,
+        gain,
         analyser,
         bytes: new Uint8Array(256),
       };
@@ -71,5 +82,5 @@ export function useSynth() {
     return Math.sqrt(power / a.bytes.length);
   }
   useEffect(() => stop, []);
-  return { start, stop, aim, level, error };
+  return { start, stop, aim, level, error, muted, toggleMute };
 }

@@ -1,7 +1,7 @@
 .cam-dock {
   position: absolute;
   bottom: 20px;
-  right: 0;
+  left: 0;
   z-index: 4;
   font-size: 12px;
 }
@@ -23,7 +23,7 @@
 .cam-guide {
   position: absolute;
   bottom: calc(100% + 6px);
-  right: 0;
+  left: 0;
   width: min(270px, 89vw);
   max-height: 65svh;
   overflow: auto;
