@@ -1,7 +1,8 @@
 "use client";
 import { useRef, useEffect, useState } from "react";
-import { Upload, X, ArrowUpRight, Layers3, Loader2, AlertCircle } from "lucide-react";
+import { Upload, X, ArrowUpRight, Layers3, AlertCircle } from "lucide-react";
 import { makeDeck, samples, type Deck, type Concept } from "./decks";
+import ThoughtLine from "./ThoughtLine";
 import "./import.css";
 
 interface GroqConcept {
@@ -21,16 +22,19 @@ interface GroqResponse {
 }
 
 function convertGroqToDeck(name: string, concepts: GroqConcept[]): Deck {
-  // Create a map of title to index for linking
   const titleToIndex = new Map<string, number>();
   concepts.forEach((c, i) => titleToIndex.set(c.title.toLowerCase(), i));
 
   return {
     name,
     nodes: concepts.map((c, i) => {
-      const correctIndex = (i * 3 + 1) % 4;
-      const options = [1, 2, 3].map(k => concepts[(i + k) % concepts.length].title);
-      options.splice(correctIndex, 0, c.title);
+      let answers = Array.isArray(c.quiz?.answers) ? [...c.quiz.answers] : [];
+      let correctIndex = typeof c.quiz?.correctIndex === "number" ? c.quiz.correctIndex : 0;
+      if (answers.length < 4) {
+        while (answers.length < 4) {
+          answers.push(`Option ${String.fromCharCode(65 + answers.length)}`);
+        }
+      }
 
       return {
         id: `${name}:${i}`,
@@ -41,10 +45,10 @@ function convertGroqToDeck(name: string, concepts: GroqConcept[]): Deck {
         lastReviewed: null,
         needsReview: false,
         quiz: {
-          question: c.quiz.question,
-          options: c.quiz.answers,
-          correctIndex: c.quiz.correctIndex,
-          explanation: c.quiz.explanation,
+          question: c.quiz?.question || `What is the core definition of ${c.title}?`,
+          options: answers.slice(0, 4),
+          correctIndex: Math.min(Math.max(0, correctIndex), 3),
+          explanation: c.quiz?.explanation || `${c.title}: ${c.summary}`,
         },
       } as Concept;
     }),
@@ -61,10 +65,11 @@ export function DeckImport({
   const dialog = useRef<HTMLDialogElement>(null),
     input = useRef<HTMLInputElement>(null),
     controller = useRef<AbortController | null>(null),
-    [busy, setBusy] = useState(false),
-    [stage, setStage] = useState<"idle" | "extracting" | "generating" | "done">("idle"),
+    [isProcessing, setIsProcessing] = useState(false),
+    [progressSteps, setProgressSteps] = useState<string[]>([]),
     [error, setError] = useState(""),
     [drag, setDrag] = useState(false);
+
   useEffect(() => {
     const d = dialog.current!;
     d.showModal();
@@ -73,62 +78,120 @@ export function DeckImport({
       controller.current?.abort();
     };
   }, []);
+
   async function read(file?: File) {
     if (!file || controller.current) return;
     const job = new AbortController();
     controller.current = job;
-    setBusy(true);
+    setIsProcessing(true);
+    setProgressSteps(["Reading PDF pages"]);
     setError("");
-    setStage("extracting");
+
     try {
       const { pdfDeck } = await import("./pdf-deck");
-      // First extract text from PDF
-      const deck = await pdfDeck(file, job.signal);
+      // Extract text from PDF with live OCR progress callback
+      const res = await pdfDeck(file, job.signal, (status) => {
+        // Parse "Scanned PDF detected — Running OCR on page X of Y..."
+        const match = status.match(/page\s+(\d+)\s+of\s+(\d+)/i);
+        const scanStep = match ? `Scanning page ${match[1]} of ${match[2]}` : status;
+
+        setProgressSteps((prev) => {
+          const lastIdx = prev.length - 1;
+          if (lastIdx >= 0 && prev[lastIdx].startsWith("Scanning page")) {
+            const next = [...prev];
+            next[lastIdx] = scanStep;
+            return next;
+          }
+          return [...prev, scanStep];
+        });
+      });
+
       if (job.signal.aborted) return;
 
-      // Now send the extracted text to Groq API for enhanced concept generation
-      setStage("generating");
-      const fullText = deck.nodes.map(n => `${n.title}: ${n.summary}`).join("\n\n");
-      
+      // Append Mapping core concepts step
+      setProgressSteps((prev) => [...prev, "Mapping core concepts"]);
+
+      const fullText =
+        res.rawText && res.rawText.trim().length >= 40
+          ? res.rawText
+          : res.nodes.map((n) => `${n.title}: ${n.summary}`).join("\n\n");
+
       const response = await fetch("/api/generate-graph", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: fullText, title: file.name.replace(/\.pdf$/i, "") }),
+        body: JSON.stringify({
+          text: fullText,
+          title: file.name.replace(/\.pdf$/i, ""),
+        }),
         signal: job.signal,
       });
 
       if (!response.ok) {
-        const err = await response.json().catch(() => ({ error: "Failed to generate concepts" }));
+        const err = await response
+          .json()
+          .catch(() => ({ error: "Failed to generate concepts" }));
+
+        // Fallback to client-generated deck if it has at least 3 nodes
+        if (res.nodes && res.nodes.length >= 3) {
+          setProgressSteps((prev) => [...prev, "Generating recall questions"]);
+          setIsProcessing(false);
+          await new Promise((r) => setTimeout(r, 600));
+          if (!job.signal.aborted) {
+            load(res);
+            close();
+          }
+          return;
+        }
+
         throw new Error(err.error || `Request failed: ${response.status}`);
       }
 
       const data: GroqResponse = await response.json();
-      
-      if (!data.concepts || data.concepts.length < 4) {
+
+      if (!data.concepts || data.concepts.length < 3) {
+        if (res.nodes && res.nodes.length >= 3) {
+          setProgressSteps((prev) => [...prev, "Generating recall questions"]);
+          setIsProcessing(false);
+          await new Promise((r) => setTimeout(r, 600));
+          if (!job.signal.aborted) {
+            load(res);
+            close();
+          }
+          return;
+        }
         throw new Error("Not enough concepts generated. Try a different PDF.");
       }
 
-      const enhancedDeck = convertGroqToDeck(file.name.replace(/\.pdf$/i, ""), data.concepts);
-      
+      // Append Generating recall questions step
+      setProgressSteps((prev) => [...prev, "Generating recall questions"]);
+
+      const enhancedDeck = convertGroqToDeck(
+        file.name.replace(/\.pdf$/i, ""),
+        data.concepts,
+      );
+
+      // Settle timer cleanly for ~600ms before closing modal and loading deck
+      setIsProcessing(false);
+      await new Promise((r) => setTimeout(r, 600));
+
       if (!job.signal.aborted) {
         load(enhancedDeck);
         close();
       }
     } catch (e) {
-      if (!job.signal.aborted)
+      if (!job.signal.aborted) {
+        setIsProcessing(false);
         setError(
           e instanceof Error && e.name !== "PasswordException"
             ? e.message
-            : "Choose an unlocked, text-based PDF.",
+            : "Choose an unlocked, text or scanned PDF.",
         );
+      }
     } finally {
       controller.current = null;
-      if (!job.signal.aborted) {
-        setBusy(false);
-        setStage("idle");
-      }
     }
   }
+
   return (
     <dialog
       ref={dialog}
@@ -138,7 +201,7 @@ export function DeckImport({
     >
       <div className="import-head">
         <span className="eyebrow">STUDY LIBRARY / IMPORT</span>
-          <button onClick={close} aria-label="Close import" disabled={busy}>
+        <button onClick={close} aria-label="Close import" disabled={isProcessing}>
           <X size={16} />
         </button>
       </div>
@@ -154,61 +217,89 @@ export function DeckImport({
           e.target.value = "";
         }}
       />
-      <button
-        disabled={busy}
-        className={"dropzone " + (drag ? "drag" : "")}
-        onClick={() => input.current?.click()}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDrag(true);
-        }}
-        onDragLeave={() => setDrag(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDrag(false);
-          void read(e.dataTransfer.files[0]);
-        }}
-      >
-        <Upload size={23} />
-        <strong>
-            {stage === "extracting" ? "Extracting text from PDF…" :
-             stage === "generating" ? "Generating concepts with AI…" :
-             "Drop a PDF or browse files"}
-        </strong>
-          <small>
-            {stage === "extracting" ? "Reading PDF pages…" :
-             stage === "generating" ? "Calling Groq (openai/gpt-oss-20b)…" :
-             "Text-based PDF · up to 20 MB · processed on device"}
-          </small>
-          {(stage === "extracting" || stage === "generating") && (
-            <Loader2 size={20} className="spin" />
-          )}
-      </button>
-        {error && (
-          <p role="alert" className="error-message">
-            <AlertCircle size={14} /> {error}
-          </p>
-        )}
-        {stage === "idle" && (
-          <>
-            <h3>Load Sample Study Deck</h3>
-            {["Optical Fiber & Holography", "Neural Networks"].map((name) => (
-              <button
-                key={name}
-                className="sample-deck"
-                disabled={busy}
-                onClick={() => {
-                  load(makeDeck(name, samples[name]));
-                  close();
-                }}
-              >
-                <Layers3 size={16} />
-                {name}
-                <ArrowUpRight size={15} />
-              </button>
-            ))}
-          </>
-        )}
+
+      {isProcessing || progressSteps.length > 0 ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-start",
+            padding: "24px 20px",
+            margin: "21px 0",
+            width: "100%",
+            minHeight: "140px",
+            background: "#1b1e17",
+            borderRadius: "9px",
+            border: "1px solid #383b32",
+            overflowX: "hidden",
+          }}
+        >
+          <ThoughtLine
+            working={isProcessing}
+            label="Building study deck…"
+            doneLabel="Deck ready in"
+            steps={progressSteps}
+            glyph="sparkle"
+            glyphColor="#C6F432"
+            color="#F4F4F5"
+            fontSize={15}
+            breathPeriod={1.6}
+            breathDepth={0.45}
+            settleDuration={350}
+            settleBlur={2}
+            collapsible={true}
+            collapseOnSettle={false}
+            showTimer={true}
+          />
+        </div>
+      ) : (
+        <button
+          disabled={isProcessing}
+          className={"dropzone " + (drag ? "drag" : "")}
+          onClick={() => input.current?.click()}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDrag(true);
+          }}
+          onDragLeave={() => setDrag(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDrag(false);
+            void read(e.dataTransfer.files[0]);
+          }}
+        >
+          <Upload size={23} />
+          <strong>Drop a PDF or browse</strong>
+          <small>PDF · up to 20 MB</small>
+        </button>
+      )}
+
+      {error && (
+        <p role="alert" className="error-message">
+          <AlertCircle size={14} /> {error}
+        </p>
+      )}
+
+      {!isProcessing && progressSteps.length === 0 && (
+        <>
+          <h3>Load Sample Study Deck</h3>
+          {["Optical Fiber & Holography", "Neural Networks"].map((name) => (
+            <button
+              key={name}
+              className="sample-deck"
+              disabled={isProcessing}
+              onClick={() => {
+                load(makeDeck(name, samples[name]));
+                close();
+              }}
+            >
+              <Layers3 size={16} />
+              {name}
+              <ArrowUpRight size={15} />
+            </button>
+          ))}
+        </>
+      )}
     </dialog>
   );
 }

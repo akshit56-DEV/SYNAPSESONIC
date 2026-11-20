@@ -11,7 +11,7 @@ function getGroqClient() {
 
 const SYSTEM_PROMPT = `You are an expert at extracting core technical concepts from educational text and creating study materials. 
 
-Given a text (which may be from a PDF), extract 8-12 core technical concepts. Ignore:
+Given a text (which may be from a PDF), extract 6-10 core technical concepts when sufficient material exists (or between 3-5 if the text is short). Ignore:
 - Cover pages, title pages, table of contents
 - College/university names, author headers, page numbers
 - Copyright notices, dedications, acknowledgments
@@ -47,7 +47,7 @@ Return ONLY a JSON object with this exact structure:
 }
 
 Ensure:
-- Exactly 8-12 concepts
+- Aim for 6-10 concepts when material permits, but accept 3 to 15 concepts cleanly
 - All 4 quiz answers are distinct
 - correctIndex is valid (0-3)
 - No extra fields, no markdown, no commentary`;
@@ -107,9 +107,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (parsed.concepts.length < 8 || parsed.concepts.length > 12) {
+    if (parsed.concepts.length < 3 || parsed.concepts.length > 15) {
       return NextResponse.json(
-        { error: `Expected 8-12 concepts, got ${parsed.concepts.length}` },
+        { error: `Expected 3-15 concepts, got ${parsed.concepts.length}` },
         { status: 500 }
       );
     }
@@ -136,10 +136,11 @@ export async function POST(request: NextRequest) {
       // Ensure answers are distinct
       const uniqueAnswers = new Set(concept.quiz.answers);
       if (uniqueAnswers.size !== 4) {
-        return NextResponse.json(
-          { error: "Quiz answers must be distinct" },
-          { status: 500 }
-        );
+        const distinct = Array.from(new Set(concept.quiz.answers as string[]));
+        while (distinct.length < 4) {
+          distinct.push(`Option ${String.fromCharCode(65 + distinct.length)}`);
+        }
+        concept.quiz.answers = distinct.slice(0, 4);
       }
     }
 

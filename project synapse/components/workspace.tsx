@@ -19,6 +19,7 @@ import { CameraControl } from "./camera-control";
 import { DeckImport } from "./deck-import";
 import { useSynth } from "./use-synth";
 import { ARBubbleSpace } from "./ar-bubble-space";
+import { MicuTutorSpace } from "./micu-tutor-space";
 
 const modes = [
   { name: "Learn with Micu", Icon: Bot },
@@ -136,7 +137,7 @@ export default function Workspace() {
 
       <div
         className="workbody"
-        style={isGestureMode ? { gridTemplateColumns: "1fr", padding: 0 } : undefined}
+        style={isGestureMode || isLearnMode ? { gridTemplateColumns: "1fr", padding: 0 } : undefined}
       >
         {/* ── Gesture Synth (mode 2): full-width AR bubble space ─────────── */}
         {isGestureMode ? (
@@ -145,6 +146,9 @@ export default function Workspace() {
             synthMuted={synth.muted}
             onToggleMute={synth.toggleMute}
           />
+        ) : isLearnMode ? (
+          /* ── Learn with Micu (mode 0): full-screen distraction-free tutor ─ */
+          <MicuTutorSpace recall={r} />
         ) : (
           <>
             <section className="context">
@@ -216,7 +220,7 @@ export default function Workspace() {
       <footer className="statusbar flex items-center justify-between">
         <span className="flex items-center gap-2">
           <i className="dot" />
-          {isGestureMode ? "AR Spatial Mode Active" : "System operational"}
+          {isGestureMode ? "AR Spatial Mode Active" : isLearnMode ? "Spatial Tutor Active" : "System operational"}
         </span>
         <span>
           SYNAPSESONIC <b>/</b> ENGINE V1.0
