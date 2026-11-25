@@ -9,10 +9,12 @@ import {
   CalendarClock,
   ChevronDown,
   Compass,
+  Download,
   Sparkles,
   Zap,
 } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
+import { usePwaInstall } from "@/components/pwa-provider";
 import { ClickSpark } from "@/components/motion/ClickSpark";
 import { PillNav } from "@/components/motion/PillNav";
 import { WebThreads } from "@/components/motion/WebThreads";
@@ -139,6 +141,7 @@ const FAQS = [
 
 export default function LandingPage() {
   const router = useRouter();
+  const { canInstall, promptInstall } = usePwaInstall();
   const [activeNav, setActiveNav] = useState("workflow");
   const [hasSession, setHasSession] = useState(false);
 
@@ -338,6 +341,17 @@ export default function LandingPage() {
                       <ArrowRight className="w-4 h-4" />
                     </Link>
                   </StarBorder>
+
+                  {canInstall && (
+                    <button
+                      type="button"
+                      onClick={() => void promptInstall()}
+                      className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-[#141416]/90 text-zinc-100 border border-white/15 hover:border-[#C6F432]/50 hover:text-white text-sm font-medium transition-colors cursor-pointer"
+                    >
+                      <Download className="w-4 h-4 text-[#C6F432]" />
+                      <span>Install App</span>
+                    </button>
+                  )}
                 </div>
               </div>
 

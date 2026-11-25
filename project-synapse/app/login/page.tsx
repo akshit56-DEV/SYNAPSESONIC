@@ -1,36 +1,43 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, Info, Mail, RotateCw } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Info,
+  Lock,
+  Mail,
+} from "lucide-react";
 import { ElectricLogo } from "@/components/brand-logo";
 import { Aurora } from "@/components/motion/Aurora";
 import { ClickSpark } from "@/components/motion/ClickSpark";
 import { LatticeLoader } from "@/components/motion/LatticeLoader";
-import { CodeSlots } from "@/components/motion/CodeSlots";
 import {
   supabase,
   isSupabaseConfigured,
   signInWithGoogle,
-  sendEmailOtp,
-  verifyEmailOtp,
+  signInWithEmailPassword,
+  signUpWithEmailPassword,
 } from "@/lib/supabase";
 
-type AuthStep = "email" | "otp";
+type AuthMode = "signin" | "signup";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [step, setStep] = useState<AuthStep>("email");
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [sendingOtp, setSendingOtp] = useState(false);
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [mode, setMode] = useState<AuthMode>("signin");
   const [email, setEmail] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [cooldown, setCooldown] = useState(0);
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [confirmationSent, setConfirmationSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const verifyingLockRef = useRef(false);
 
   useEffect(() => {
     if (!supabase) {
@@ -52,14 +59,6 @@ export default function LoginPage() {
       });
   }, [router]);
 
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const id = window.setInterval(() => {
-      setCooldown((c) => (c > 1 ? c - 1 : 0));
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [cooldown]);
-
   async function handleGoogleSignIn() {
     setGoogleLoading(true);
     setError(null);
@@ -70,63 +69,50 @@ export default function LoginPage() {
     }
   }
 
-  async function handleSendOtp(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    const clean = email.trim();
-    if (!clean || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       setError("Please enter a valid email address.");
       return;
     }
-
-    setSendingOtp(true);
-    setError(null);
-    const { error: otpError } = await sendEmailOtp(clean);
-    setSendingOtp(false);
-
-    if (otpError) {
-      setError(otpError);
+    if (!password || password.length < 6) {
+      setError("Password must be at least 6 characters.");
       return;
     }
 
-    setOtpCode("");
-    setCooldown(60);
-    setStep("otp");
-  }
-
-  async function handleVerifyOtp(tokenOverride?: string) {
-    const token = (tokenOverride ?? otpCode).trim();
-    if (token.length !== 6 || verifyingLockRef.current) return;
-
-    verifyingLockRef.current = true;
-    setVerifyingOtp(true);
+    setSubmitting(true);
     setError(null);
 
-    const { data, error: verifyError } = await verifyEmailOtp(email, token);
-    if (verifyError || !data?.session) {
-      setError(
-        verifyError || "Invalid or expired code. Please check and try again."
+    if (mode === "signin") {
+      const { user, error: signInError } = await signInWithEmailPassword(
+        cleanEmail,
+        password
       );
-      setVerifyingOtp(false);
-      verifyingLockRef.current = false;
+      if (signInError || !user) {
+        setError(signInError || "Invalid email or password.");
+        setSubmitting(false);
+        return;
+      }
+      router.push("/workspace");
+      return;
+    }
+
+    const { user, needsConfirmation, error: signUpError } =
+      await signUpWithEmailPassword(cleanEmail, password);
+    setSubmitting(false);
+
+    if (signUpError || !user) {
+      setError(signUpError || "Unable to create account.");
+      return;
+    }
+
+    if (needsConfirmation) {
+      setConfirmationSent(true);
       return;
     }
 
     router.push("/workspace");
-  }
-
-  async function handleResendOtp() {
-    if (cooldown > 0 || sendingOtp) return;
-    setSendingOtp(true);
-    setError(null);
-    const { error: otpError } = await sendEmailOtp(email);
-    setSendingOtp(false);
-
-    if (otpError) {
-      setError(otpError);
-      return;
-    }
-    setOtpCode("");
-    setCooldown(60);
   }
 
   if (checkingSession) {
@@ -145,18 +131,18 @@ export default function LoginPage() {
       sparkRadius={22}
       duration={380}
     >
-      <div className="min-h-screen bg-[#0B0B0C] text-zinc-100 flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      <div className="min-h-screen bg-[#0B0B0C] text-zinc-100 flex flex-col items-center justify-center p-5 sm:p-6 relative overflow-hidden">
         <Aurora />
 
         <Link
           href="/"
-          className="relative z-10 sm:absolute sm:top-6 sm:left-6 mb-6 sm:mb-0 self-start flex items-center gap-2 text-zinc-400 hover:text-white text-xs font-mono uppercase tracking-wider transition-colors"
+          className="relative z-10 sm:absolute sm:top-6 sm:left-6 mb-5 sm:mb-0 self-start flex items-center gap-2 text-zinc-400 hover:text-white text-xs font-mono uppercase tracking-wider transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Home</span>
         </Link>
 
-        <div className="relative z-10 w-full max-w-[420px] bg-[#141416]/90 backdrop-blur-2xl border border-white/10 rounded-2xl px-8 py-9 shadow-[0_28px_90px_rgba(0,0,0,0.72)] overflow-hidden">
+        <div className="relative z-10 w-full max-w-[420px] bg-[#141416]/90 backdrop-blur-2xl border border-white/10 rounded-2xl px-6 sm:px-8 py-8 shadow-[0_28px_90px_rgba(0,0,0,0.72)] overflow-hidden">
           {/* Subtle top specular sheen */}
           <div
             aria-hidden="true"
@@ -168,35 +154,202 @@ export default function LoginPage() {
               <ElectricLogo size="lg" />
             </Link>
             <h1 className="text-2xl font-semibold text-white tracking-tight">
-              Sync your decks across devices
+              {confirmationSent
+                ? "Confirm your email"
+                : mode === "signin"
+                  ? "Welcome back"
+                  : "Create your account"}
             </h1>
             <p className="text-sm text-zinc-400 mt-1.5 leading-relaxed">
-              Keep your 3D knowledge graphs, forged bridges, and mastery
-              progress backed up automatically.
+              {confirmationSent
+                ? "One quick click to activate your SynapseSonic workspace."
+                : "Keep your 3D knowledge graphs, forged bridges, and mastery progress synced everywhere."}
             </p>
           </div>
-
-          <div className="h-px bg-white/10 mb-6" />
 
           {!isSupabaseConfigured ? (
             <div className="px-4 py-3.5 rounded-xl bg-[#0B0B0C] border border-white/10 text-xs text-zinc-400 leading-relaxed flex items-start gap-2.5">
               <Info className="w-4 h-4 text-[#C6F432] shrink-0 mt-0.5" />
               <span>
                 Cloud sync is not configured yet. Add Supabase environment
-                variables to enable Google or Email OTP sign-in.
+                variables to enable account sign-in.
               </span>
             </div>
-          ) : step === "email" ? (
-            <div
-              key="step-email"
-              className="space-y-5 animate-[ssAuthFade_220ms_ease-out]"
-            >
+          ) : confirmationSent ? (
+            <div className="space-y-5 animate-[ssAuthFade_220ms_ease-out]">
+              <div className="p-4 rounded-xl bg-[#C6F432]/10 border border-[#C6F432]/30 flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 text-[#C6F432] shrink-0 mt-0.5" />
+                <div className="text-sm text-zinc-200 leading-relaxed">
+                  Check your email and click the confirmation link to enter{" "}
+                  <span className="font-semibold text-white">SynapseSonic</span>.
+                  <div className="mt-1.5 text-xs text-zinc-400 break-all">
+                    Sent to {email.trim()}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmationSent(false);
+                  setMode("signin");
+                  setPassword("");
+                  setError(null);
+                }}
+                className="w-full px-5 py-3 rounded-xl bg-[#0B0B0C] border border-white/15 hover:border-white/30 text-sm font-medium text-zinc-200 transition-colors cursor-pointer"
+              >
+                Back to Sign In
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-5 animate-[ssAuthFade_220ms_ease-out]">
+              {/* Sign In / Create Account Segmented Toggle */}
+              <div
+                role="tablist"
+                aria-label="Authentication mode"
+                className="grid grid-cols-2 p-1 rounded-xl bg-[#0B0B0C] border border-white/10"
+              >
+                {(
+                  [
+                    { id: "signin", label: "Sign In" },
+                    { id: "signup", label: "Create Account" },
+                  ] as const
+                ).map((tab) => {
+                  const active = mode === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => {
+                        setMode(tab.id);
+                        setError(null);
+                      }}
+                      className={`py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                        active
+                          ? "bg-[#C6F432] text-[#0B0B0C] shadow-sm"
+                          : "text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Email + Password Form */}
+              <form onSubmit={handleSubmit} className="space-y-3.5">
+                <div>
+                  <label
+                    htmlFor="login-email"
+                    className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-1.5"
+                  >
+                    Email address
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      id="login-email"
+                      type="email"
+                      autoComplete="email"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (error) setError(null);
+                      }}
+                      placeholder="you@example.com"
+                      disabled={submitting || googleLoading}
+                      className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#0B0B0C] border border-white/15 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#C6F432] transition-colors disabled:opacity-60"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="login-password"
+                    className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-1.5"
+                  >
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      id="login-password"
+                      type={showPassword ? "text" : "password"}
+                      autoComplete={
+                        mode === "signin" ? "current-password" : "new-password"
+                      }
+                      value={password}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        if (error) setError(null);
+                      }}
+                      placeholder={
+                        mode === "signup" ? "At least 6 characters" : "••••••••"
+                      }
+                      disabled={submitting || googleLoading}
+                      className="w-full pl-10 pr-11 py-2.5 rounded-xl bg-[#0B0B0C] border border-white/15 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#C6F432] transition-colors disabled:opacity-60"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <p className="text-xs text-red-400 leading-relaxed">{error}</p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={submitting || googleLoading}
+                  className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#C6F432] text-[#0B0B0C] hover:bg-[#d4f75c] text-sm font-semibold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait shadow-[0_0_24px_rgba(198,244,50,0.18)]"
+                >
+                  {submitting ? (
+                    <>
+                      <LatticeLoader size={16} color="#09090B" />
+                      <span>
+                        {mode === "signin"
+                          ? "Signing in..."
+                          : "Creating account..."}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>
+                        {mode === "signin" ? "Sign In" : "Create Account"}
+                      </span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Hairline "or" Divider */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 h-px bg-white/10" />
+                <span className="text-[11px] font-mono text-zinc-500 uppercase tracking-wider">
+                  or
+                </span>
+                <div className="flex-1 h-px bg-white/10" />
+              </div>
+
               {/* Google OAuth */}
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                disabled={googleLoading || sendingOtp}
-                className={`w-full flex items-center justify-center gap-3 px-5 py-3.5 rounded-xl text-sm font-semibold transition-all ${
+                disabled={googleLoading || submitting}
+                className={`w-full flex items-center justify-center gap-3 px-5 py-3 rounded-xl text-sm font-semibold transition-all ${
                   googleLoading
                     ? "bg-white/90 text-zinc-900 cursor-wait"
                     : "bg-white text-zinc-950 hover:bg-zinc-100 shadow-[0_6px_24px_rgba(255,255,255,0.12)] cursor-pointer"
@@ -237,146 +390,10 @@ export default function LoginPage() {
                   </>
                 )}
               </button>
-
-              {/* Hairline Divider */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-white/10" />
-                <span className="text-[11px] font-mono text-zinc-500 uppercase tracking-wider whitespace-nowrap">
-                  or continue with email
-                </span>
-                <div className="flex-1 h-px bg-white/10" />
-              </div>
-
-              {/* Email Input + Send Login Code */}
-              <form onSubmit={handleSendOtp} className="space-y-3">
-                <div>
-                  <label
-                    htmlFor="login-email"
-                    className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-1.5"
-                  >
-                    Email address
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                    <input
-                      id="login-email"
-                      type="email"
-                      autoComplete="email"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                        if (error) setError(null);
-                      }}
-                      placeholder="you@example.com"
-                      disabled={sendingOtp || googleLoading}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl bg-[#0B0B0C] border border-white/15 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-[#C6F432] transition-colors disabled:opacity-60"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={sendingOtp || googleLoading}
-                  className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#C6F432] text-[#0B0B0C] hover:bg-[#d4f75c] text-sm font-semibold transition-all cursor-pointer disabled:opacity-60 disabled:cursor-wait shadow-[0_0_24px_rgba(198,244,50,0.18)]"
-                >
-                  {sendingOtp ? (
-                    <>
-                      <LatticeLoader size={16} color="#09090B" />
-                      <span>Sending Code...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Send Login Code</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
-                </button>
-              </form>
-            </div>
-          ) : (
-            <div
-              key="step-otp"
-              className="space-y-5 animate-[ssAuthFade_220ms_ease-out]"
-            >
-              <div className="space-y-1.5">
-                <p className="text-sm text-zinc-300 leading-relaxed">
-                  Enter the 6-digit code sent to{" "}
-                  <span className="font-semibold text-white break-all">
-                    {email.trim()}
-                  </span>
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStep("email");
-                    setOtpCode("");
-                    setError(null);
-                    verifyingLockRef.current = false;
-                  }}
-                  className="text-xs font-mono text-[#C6F432] hover:underline cursor-pointer"
-                >
-                  Change email
-                </button>
-              </div>
-
-              <CodeSlots
-                value={otpCode}
-                onChange={(val) => {
-                  setOtpCode(val);
-                  if (error) setError(null);
-                }}
-                onComplete={(code) => void handleVerifyOtp(code)}
-                disabled={verifyingOtp}
-                hasError={Boolean(error)}
-              />
-
-              <button
-                type="button"
-                onClick={() => void handleVerifyOtp()}
-                disabled={otpCode.length !== 6 || verifyingOtp}
-                className="w-full flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-[#C6F432] text-[#0B0B0C] hover:bg-[#d4f75c] text-sm font-semibold transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_24px_rgba(198,244,50,0.18)]"
-              >
-                {verifyingOtp ? (
-                  <>
-                    <LatticeLoader size={16} color="#09090B" />
-                    <span>Verifying...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Verify &amp; Enter</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-
-              <div className="flex items-center justify-between text-xs text-zinc-400">
-                <span>Didn&apos;t receive it?</span>
-                <button
-                  type="button"
-                  onClick={() => void handleResendOtp()}
-                  disabled={cooldown > 0 || sendingOtp || verifyingOtp}
-                  className="inline-flex items-center gap-1.5 font-mono text-zinc-200 hover:text-[#C6F432] disabled:text-zinc-500 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                >
-                  <RotateCw
-                    className={`w-3.5 h-3.5 ${sendingOtp ? "animate-spin" : ""}`}
-                  />
-                  <span>
-                    {cooldown > 0
-                      ? `Resend in ${cooldown}s`
-                      : sendingOtp
-                        ? "Sending..."
-                        : "Resend code"}
-                  </span>
-                </button>
-              </div>
             </div>
           )}
 
-          {error && (
-            <p className="mt-3 text-xs text-red-400 leading-relaxed">{error}</p>
-          )}
-
-          <div className="flex items-center gap-3 my-6">
+          <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px bg-white/10" />
             <span className="text-[11px] font-mono text-zinc-500 uppercase tracking-wider">
               or
@@ -386,12 +403,12 @@ export default function LoginPage() {
 
           <Link
             href="/workspace"
-            className="flex items-center justify-center w-full px-5 py-3 rounded-xl bg-[#0B0B0C] text-zinc-200 border border-white/10 text-sm font-medium hover:border-white/25 hover:text-white transition-colors"
+            className="flex items-center justify-center w-full px-5 py-2.5 rounded-xl bg-[#0B0B0C] text-zinc-200 border border-white/10 text-sm font-medium hover:border-white/25 hover:text-white transition-colors"
           >
             Continue as Guest →
           </Link>
 
-          <p className="mt-5 text-[11px] text-zinc-500 text-center leading-relaxed">
+          <p className="mt-4 text-[11px] text-zinc-500 text-center leading-relaxed">
             Instant access in Guest Mode. Sign in anytime for multi-device cloud
             sync.
           </p>

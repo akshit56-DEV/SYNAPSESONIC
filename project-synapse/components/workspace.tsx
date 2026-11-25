@@ -23,6 +23,8 @@ import {
   Sparkles,
   ArrowRight,
   BookOpen,
+  Bell,
+  Download,
 } from "lucide-react";
 import { useRecall } from "./use-recall";
 import { DeckImport } from "./deck-import";
@@ -34,7 +36,14 @@ import { LatticeLoader } from "./motion/LatticeLoader";
 import { OnboardingStepper } from "./onboarding-stepper";
 import { WorkspaceTour } from "./workspace-tour";
 import { WorkspaceHelpModal } from "./workspace-help-modal";
-import { makeDeck, samples, retentionAt, type Concept } from "./decks";
+import { usePwaInstall } from "./pwa-provider";
+import {
+  makeDeck,
+  samples,
+  retentionAt,
+  elapsedDaysSince,
+  type Concept,
+} from "./decks";
 import type {
   ForgedSynapse,
   ForgedBridgePayload,
@@ -237,6 +246,8 @@ export default function Workspace() {
       "idle" | "syncing" | "synced" | "error"
     >("idle"),
     [accountMenuOpen, setAccountMenuOpen] = useState(false),
+    [notifMenuOpen, setNotifMenuOpen] = useState(false),
+    [remindersEnabled, setRemindersEnabled] = useState(false),
     [studyProfile, setStudyProfile] = useState<UserStudyProfile | null>(null),
     [onboardingOpen, setOnboardingOpen] = useState(false),
     [tourActive, setTourActive] = useState(false),
@@ -244,6 +255,7 @@ export default function Workspace() {
     [toastMessage, setToastMessage] = useState<string | null>(null),
     deckMenuRef = useRef<HTMLDivElement>(null),
     accountMenuRef = useRef<HTMLDivElement>(null),
+    notifMenuRef = useRef<HTMLDivElement>(null),
     savedDecksRef = useRef<SavedDeck[]>(savedDecks),
     activeDeckIdRef = useRef<string>(activeDeckId),
     userRef = useRef<User | null>(user),
@@ -254,7 +266,8 @@ export default function Workspace() {
       null
     ),
     r = useRecall(importing),
-    synth = useSynth();
+    synth = useSynth(),
+    { canInstall, promptInstall } = usePwaInstall();
 
   savedDecksRef.current = savedDecks;
   activeDeckIdRef.current = activeDeckId;
@@ -512,7 +525,7 @@ export default function Workspace() {
     });
   }, [r.deck, forgedSynapses, r.day, activeDeckId, hasHydrated, user]);
 
-  // ── 3. Close Deck & Account Menus on Click Outside ─────────────────────────
+  // ── 3. Close Deck, Notification & Account Menus on Click Outside ────────────
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -527,14 +540,20 @@ export default function Workspace() {
       ) {
         setAccountMenuOpen(false);
       }
+      if (
+        notifMenuRef.current &&
+        !notifMenuRef.current.contains(event.target as Node)
+      ) {
+        setNotifMenuOpen(false);
+      }
     }
-    if (deckMenuOpen || accountMenuOpen) {
+    if (deckMenuOpen || accountMenuOpen || notifMenuOpen) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => {
         document.removeEventListener("mousedown", handleClickOutside);
       };
     }
-  }, [deckMenuOpen, accountMenuOpen]);
+  }, [deckMenuOpen, accountMenuOpen, notifMenuOpen]);
 
   // ── 4. Debounced Cloud Sync on Active Deck Mutations ───────────────────────
   useEffect(() => {
@@ -831,6 +850,88 @@ export default function Workspace() {
     });
   }, [r.nodes]);
 
+  const weakConcepts = useMemo(() => {
+    return deduplicatedNodes
+      .map((node, index) => {
+        const retention = r.values[index] ?? retentionAt(node, 0);
+        const daysElapsed = Math.floor(elapsedDaysSince(node));
+        return { node, index, retention, daysElapsed };
+      })
+      .filter((item) => item.retention < 50 || item.daysElapsed >= 1)
+      .sort((a, b) => a.retention - b.retention);
+  }, [deduplicatedNodes, r.values]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved =
+      window.localStorage.getItem("synapsesonic_reminders") === "true";
+    const granted =
+      "Notification" in window && Notification.permission === "granted";
+    setRemindersEnabled(saved && granted);
+  }, []);
+
+  useEffect(() => {
+    if (
+      !hasHydrated ||
+      !remindersEnabled ||
+      weakConcepts.length === 0 ||
+      typeof window === "undefined" ||
+      !("Notification" in window) ||
+      Notification.permission !== "granted"
+    ) {
+      return;
+    }
+    const todayKey = new Date().toISOString().slice(0, 10);
+    if (window.localStorage.getItem("synapsesonic_last_notif_day") === todayKey) {
+      return;
+    }
+    window.localStorage.setItem("synapsesonic_last_notif_day", todayKey);
+    try {
+      new Notification("SynapseSonic Memory Decay Alert", {
+        body: `${weakConcepts.length} concept${weakConcepts.length === 1 ? " is" : "s are"} fading — quick review ready.`,
+        icon: "/icon.svg",
+      });
+    } catch {
+      // Quiet fallback if Notification constructor blocked
+    }
+  }, [hasHydrated, remindersEnabled, weakConcepts.length]);
+
+  const handleToggleReminders = useCallback(async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      showToast("Browser notifications are not supported on this device");
+      return;
+    }
+    if (remindersEnabled) {
+      window.localStorage.setItem("synapsesonic_reminders", "false");
+      setRemindersEnabled(false);
+      showToast("Browser reminders paused");
+      return;
+    }
+    try {
+      const perm =
+        Notification.permission === "granted"
+          ? "granted"
+          : await Notification.requestPermission();
+      if (perm === "granted") {
+        window.localStorage.setItem("synapsesonic_reminders", "true");
+        setRemindersEnabled(true);
+        showToast("Browser decay reminders enabled");
+        try {
+          new Notification("SynapseSonic Reminders Active", {
+            body: "We'll alert you when saved concepts need a quick recall check.",
+            icon: "/icon.svg",
+          });
+        } catch {}
+      } else {
+        window.localStorage.setItem("synapsesonic_reminders", "false");
+        setRemindersEnabled(false);
+        showToast("Allow notifications in browser settings for decay alerts");
+      }
+    } catch {
+      showToast("Unable to enable browser notifications");
+    }
+  }, [remindersEnabled, showToast]);
+
   // ── 5. Load Study Profile & Trigger First-Time Onboarding ─────────────────
   useEffect(() => {
     if (!hasHydrated) return;
@@ -882,6 +983,7 @@ export default function Workspace() {
         setHelpOpen(false);
         setAccountMenuOpen(false);
         setDeckMenuOpen(false);
+        setNotifMenuOpen(false);
         return;
       }
 
@@ -1404,6 +1506,124 @@ export default function Workspace() {
             <HelpCircle size={15} />
           </button>
 
+          {/* ── Memory Decay Notification Bell ─────────────────────────── */}
+          {hasHydrated && (
+            <div ref={notifMenuRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  setDeckMenuOpen(false);
+                  setNotifMenuOpen((v) => !v);
+                }}
+                title="Memory Decay Alerts"
+                aria-label="Memory Decay Alerts"
+                className="w-[30px] h-[30px] md:w-[34px] md:h-[34px] rounded-full relative grid place-items-center cursor-pointer transition-all shrink-0"
+                style={{
+                  background: "rgba(24, 24, 27, 0.9)",
+                  border: notifMenuOpen
+                    ? "1px solid rgba(198, 244, 50, 0.55)"
+                    : "1px solid rgba(255, 255, 255, 0.12)",
+                  color: weakConcepts.length > 0 ? "#FAFAFA" : "#A1A1AA",
+                }}
+              >
+                <Bell size={15} />
+                {weakConcepts.length > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-[#C6F432] text-[#0B0B0C] text-[10px] font-bold flex items-center justify-center leading-none shadow-[0_0_8px_rgba(198,244,50,0.6)]"
+                  >
+                    {weakConcepts.length > 9 ? "9+" : weakConcepts.length}
+                  </span>
+                )}
+              </button>
+
+              {notifMenuOpen && (
+                <div
+                  className="fixed right-3 top-[60px] sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+8px)] w-[min(296px,calc(100vw-24px))] z-[90] rounded-2xl p-3 flex flex-col gap-2.5"
+                  style={{
+                    background: "rgba(18, 18, 21, 0.97)",
+                    backdropFilter: "blur(24px)",
+                    WebkitBackdropFilter: "blur(24px)",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    boxShadow: "0 16px 40px rgba(0, 0, 0, 0.65)",
+                  }}
+                >
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-xs font-semibold text-white">
+                      Memory Decay Alerts
+                    </span>
+                    <span className="text-[11px] font-mono text-[#C6F432]">
+                      {weakConcepts.length} fading
+                    </span>
+                  </div>
+
+                  <div className="max-h-[220px] overflow-y-auto no-scrollbar flex flex-col gap-1.5">
+                    {weakConcepts.length === 0 ? (
+                      <div className="py-5 px-2 text-center text-xs text-zinc-400">
+                        {deduplicatedNodes.length === 0
+                          ? "Upload a PDF to start tracking calendar memory decay."
+                          : "All concepts are fresh right now."}
+                      </div>
+                    ) : (
+                      weakConcepts.map((item) => (
+                        <div
+                          key={item.node.id}
+                          className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white/[0.04] border border-white/10"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-medium text-zinc-100 truncate">
+                              {item.node.title}
+                            </div>
+                            <div className="text-[10.5px] font-mono text-amber-400 mt-0.5">
+                              {item.retention}% mastery
+                              {item.daysElapsed >= 1
+                                ? ` · ${item.daysElapsed}d ago`
+                                : ""}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNotifMenuOpen(false);
+                              setView("studio");
+                              synth.stop();
+                              setMode(0);
+                              r.focusNode(item.index);
+                            }}
+                            className="shrink-0 px-2.5 py-1 rounded-lg bg-[#C6F432] text-[#0B0B0C] text-[11px] font-semibold hover:bg-[#d4f75c] transition-colors cursor-pointer"
+                          >
+                            Review Now
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2 px-1">
+                    <span className="text-[11px] text-zinc-300">
+                      Enable Browser Reminders
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={remindersEnabled}
+                      onClick={() => void handleToggleReminders()}
+                      className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer shrink-0 ${
+                        remindersEnabled ? "bg-[#C6F432]" : "bg-zinc-700"
+                      }`}
+                    >
+                      <span
+                        className={`block w-3.5 h-3.5 rounded-full bg-[#0B0B0C] transition-transform duration-150 ${
+                          remindersEnabled ? "translate-x-[18px]" : "translate-x-[3px]"
+                        }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Account / Cloud Sync & Controls Pill ───────────────────── */}
           {hasHydrated && (
             <div
@@ -1686,6 +1906,40 @@ export default function Workspace() {
                     <SlidersHorizontal size={13} color="#C6F432" />
                     <span>Edit Study Profile</span>
                   </button>
+
+                  {canInstall && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAccountMenuOpen(false);
+                        void promptInstall();
+                      }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "7px 8px",
+                        borderRadius: 8,
+                        background: "transparent",
+                        border: "none",
+                        color: "#D4D4D8",
+                        fontSize: 12,
+                        cursor: "pointer",
+                        textAlign: "left",
+                        transition: "background 0.15s",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background =
+                          "rgba(255, 255, 255, 0.06)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "transparent";
+                      }}
+                    >
+                      <Download size={13} color="#C6F432" />
+                      <span>Install App</span>
+                    </button>
+                  )}
 
                   <div
                     style={{

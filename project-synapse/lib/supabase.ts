@@ -75,6 +75,88 @@ export async function signOut(): Promise<{ error: string | null }> {
   }
 }
 
+export async function signInWithEmailPassword(
+  email: string,
+  password: string
+): Promise<{
+  user: User | null;
+  error: string | null;
+}> {
+  if (!supabase) {
+    return {
+      user: null,
+      error:
+        "Cloud sync is not configured yet (missing Supabase environment variables).",
+    };
+  }
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    if (error) {
+      return {
+        user: null,
+        error: error.message || "Invalid email or password.",
+      };
+    }
+    return { user: data.user ?? null, error: null };
+  } catch {
+    return {
+      user: null,
+      error: "Unable to sign in right now. Please try again.",
+    };
+  }
+}
+
+export async function signUpWithEmailPassword(
+  email: string,
+  password: string
+): Promise<{
+  user: User | null;
+  needsConfirmation: boolean;
+  error: string | null;
+}> {
+  if (!supabase) {
+    return {
+      user: null,
+      needsConfirmation: false,
+      error:
+        "Cloud sync is not configured yet (missing Supabase environment variables).",
+    };
+  }
+  try {
+    const redirectTo =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/workspace`
+        : undefined;
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: redirectTo ? { emailRedirectTo: redirectTo } : undefined,
+    });
+    if (error) {
+      return {
+        user: null,
+        needsConfirmation: false,
+        error: error.message || "Unable to create account.",
+      };
+    }
+    const needsConfirmation = Boolean(data.user && !data.session);
+    return {
+      user: data.user ?? null,
+      needsConfirmation,
+      error: null,
+    };
+  } catch {
+    return {
+      user: null,
+      needsConfirmation: false,
+      error: "Unable to create account right now. Please try again.",
+    };
+  }
+}
+
 export async function sendEmailOtp(
   email: string
 ): Promise<{ error: string | null }> {

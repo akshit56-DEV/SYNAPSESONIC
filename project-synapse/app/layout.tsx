@@ -6,6 +6,7 @@ import {
   Newsreader,
 } from "next/font/google";
 import "./globals.css";
+import { PwaRegistrar } from "@/components/pwa-provider";
 
 const newsreader = Newsreader({
   subsets: ["latin"],
@@ -51,6 +52,7 @@ export default function RootLayout({
       className={`dark ${newsreader.variable} ${hankenGrotesk.variable} ${jetbrainsMono.variable}`}
     >
       <body className="antialiased overflow-x-hidden">
+        <PwaRegistrar />
         {children}
         {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
