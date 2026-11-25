@@ -1369,7 +1369,7 @@ export default function Workspace() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-1.5 md:gap-2.5 shrink-0">
+        <div className="ml-auto flex items-center gap-1.5 md:gap-2.5 shrink-0">
           <button
             className="upload !px-2.5 !py-1.5 md:!px-4 md:!py-[10px]"
             aria-label="Upload PDF"
@@ -1514,12 +1514,8 @@ export default function Workspace() {
 
               {accountMenuOpen && (
                 <div
+                  className="fixed right-3 top-[60px] sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+8px)] w-[min(252px,calc(100vw-24px))] z-[90] flex flex-col gap-[3px]"
                   style={{
-                    position: "absolute",
-                    top: "calc(100% + 8px)",
-                    right: 0,
-                    width: 252,
-                    zIndex: 90,
                     background: "rgba(18, 18, 21, 0.97)",
                     backdropFilter: "blur(24px)",
                     WebkitBackdropFilter: "blur(24px)",
@@ -1527,9 +1523,6 @@ export default function Workspace() {
                     borderRadius: 14,
                     padding: "10px 8px",
                     boxShadow: "0 16px 40px rgba(0, 0, 0, 0.65)",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 3,
                   }}
                 >
                   <div style={{ padding: "4px 8px 8px" }}>

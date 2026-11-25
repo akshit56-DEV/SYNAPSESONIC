@@ -434,6 +434,8 @@ export function StudyTerrarium({
 
   // Surprise / Try Another Pair Rotation Ref
   const recentPairsRef = useRef<Set<string>>(new Set());
+  // Permanent per-question lock ref so answered questions cannot be re-answered to farm mastery
+  const answeredQuestionsRef = useRef<Map<string, number>>(new Map());
 
   // ── Three.js Scene References ───────────────────────────────────────────────
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -566,7 +568,9 @@ export function StudyTerrarium({
     if (sceneRef.current) {
       sceneRef.current.rotation.y = 0;
     }
-    smoothFrame(new THREE.Vector3(0, 5, 19), new THREE.Vector3(0, 0, 0));
+    const mobileZ =
+      typeof window !== "undefined" && window.innerWidth < 768 ? 24 : 19;
+    smoothFrame(new THREE.Vector3(0, 5, mobileZ), new THREE.Vector3(0, 0, 0));
     setSelectedNodeId(null);
     setFusionA(null);
     setFusionB(null);
@@ -578,6 +582,10 @@ export function StudyTerrarium({
     () => nodes.map((n) => n.id).join("|"),
     [nodes]
   );
+  useEffect(() => {
+    answeredQuestionsRef.current.clear();
+  }, [deckTitle]);
+
   useEffect(() => {
     const idSet = new Set(nodes.map((n) => n.id));
     if (selectedNodeIdRef.current && !idSet.has(selectedNodeIdRef.current)) {
@@ -600,14 +608,27 @@ export function StudyTerrarium({
     }
   }, [deckTitle, deckNodeSignature, nodes]);
 
-  // ── Fix Stale Quiz Leak Between Nodes ───────────────────────────────────────
+  // ── Restore / Lock Recall Check Per Node (Prevents Mastery Farming) ──────────
   useEffect(() => {
     setQuizQuestionData(null);
-    setInspectorQuizSelected(null);
-    setInspectorQuizAnswered(false);
     setQuizError(null);
     setBranchingError(null);
     setQuizHistory([]);
+    if (selectedNodeId) {
+      const node = nodesRef.current.find((n) => n.id === selectedNodeId);
+      const qKey = `${selectedNodeId}::${node?.quiz?.question || ""}`;
+      const priorAnswer = answeredQuestionsRef.current.get(qKey);
+      if (priorAnswer !== undefined) {
+        setInspectorQuizSelected(priorAnswer);
+        setInspectorQuizAnswered(true);
+      } else {
+        setInspectorQuizSelected(null);
+        setInspectorQuizAnswered(false);
+      }
+    } else {
+      setInspectorQuizSelected(null);
+      setInspectorQuizAnswered(false);
+    }
     if (inspectorScrollRef.current) {
       inspectorScrollRef.current.scrollTop = 0;
     }
@@ -634,9 +655,9 @@ export function StudyTerrarium({
     scene.background = null;
     sceneRef.current = scene;
 
-    // 2. Camera with enforced comfortable depth
+    // 2. Camera with enforced comfortable depth (pulled slightly back on mobile)
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    camera.position.set(0, 5, 19);
+    camera.position.set(0, 5, width < 768 ? 24 : 19);
     cameraRef.current = camera;
 
     // 3. Renderer
@@ -1715,7 +1736,15 @@ export function StudyTerrarium({
     correctIdx: number,
     concept: Concept
   ) => {
-    if (inspectorQuizSelected !== null) return;
+    const qKey = `${concept.id}::${activeQuiz?.question || ""}`;
+    if (
+      inspectorQuizAnswered ||
+      inspectorQuizSelected !== null ||
+      answeredQuestionsRef.current.has(qKey)
+    ) {
+      return;
+    }
+    answeredQuestionsRef.current.set(qKey, optIdx);
     setInspectorQuizSelected(optIdx);
     setInspectorQuizAnswered(true);
 
@@ -1959,7 +1988,9 @@ export function StudyTerrarium({
                   Click to fuse
                 </span>
               )}
-              <span>{item.title}</span>
+              <span className="max-w-[110px] truncate text-[10px] md:max-w-none md:text-[11px]">
+                {item.title}
+              </span>
             </div>
           );
         })}
@@ -2012,10 +2043,11 @@ export function StudyTerrarium({
         })}
       </div>
 
-      {/* ── Top-Left Floating Header with Live Stats ─────────────────────── */}
+      {/* ── Top Floating Header Row (Stats, Filters & Below-Row Fusion Banner) ── */}
       <div
-        className="absolute top-3 left-3 md:top-[18px] md:left-[22px] max-w-[calc(100vw-24px)] z-20 flex flex-col gap-2 pointer-events-auto"
+        className="absolute top-3 left-3 right-3 md:top-[18px] md:left-[22px] md:right-[22px] z-20 flex flex-col gap-2 pointer-events-none"
       >
+        <div className="flex flex-col gap-2 w-fit max-w-full pointer-events-auto">
         <div>
           <h2
             style={{
@@ -2123,6 +2155,73 @@ export function StudyTerrarium({
               }}
             >
               Show all
+            </button>
+          </div>
+        )}
+        </div>
+
+        {/* Guided Prompt (Below filter row on mobile; Top-center on desktop md+) */}
+        {fuseMode && (
+          <div
+            className="pointer-events-auto w-fit max-w-full flex flex-wrap items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium text-zinc-100 md:absolute md:top-0.5 md:left-1/2 md:-translate-x-1/2"
+            style={{
+              background: "rgba(18, 18, 21, 0.94)",
+              border: "1px solid rgba(198, 244, 50, 0.35)",
+              backdropFilter: "blur(20px)",
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.45)",
+            }}
+          >
+            <Zap size={14} color="#C6F432" className="shrink-0" />
+            <span className="truncate max-w-[200px] sm:max-w-none">
+              {!fusionA
+                ? "Select 1st concept"
+                : !fusionB
+                  ? `Select 2nd to fuse with "${
+                      nodes.find((n) => n.id === fusionA)?.title
+                    }"`
+                  : "Synapse Bridge active"}
+            </span>
+
+            {!fusionB && (
+              <button
+                onClick={handleSurprisePair}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "3px 8px",
+                  borderRadius: 6,
+                  background: "rgba(198, 244, 50, 0.15)",
+                  border: "1px solid rgba(198, 244, 50, 0.3)",
+                  color: "#C6F432",
+                  fontSize: 11,
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                <Dices size={12} />
+                <span>Surprise pair</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => {
+                setFuseMode(false);
+                setFusionA(null);
+                setFusionB(null);
+                setFusionData(null);
+              }}
+              aria-label="Exit fusion mode"
+              style={{
+                background: "none",
+                border: "none",
+                color: "#A1A1AA",
+                cursor: "pointer",
+                padding: 0,
+                marginLeft: 2,
+              }}
+            >
+              <X size={14} />
             </button>
           </div>
         )}
@@ -2249,84 +2348,6 @@ export function StudyTerrarium({
               )}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ── Top-Center Guided Prompt (Fusion Mode Active) ─────────────────── */}
-      {fuseMode && (
-        <div
-          style={{
-            position: "absolute",
-            top: 20,
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 25,
-            background: "rgba(18, 18, 21, 0.94)",
-            border: "1px solid rgba(198, 244, 50, 0.35)",
-            borderRadius: 999,
-            padding: "5px 14px",
-            fontSize: 12,
-            fontWeight: 550,
-            color: "#FAFAFA",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            backdropFilter: "blur(20px)",
-            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.45)",
-          }}
-        >
-          <Zap size={14} color="#C6F432" />
-          <span>
-            {!fusionA
-              ? "Select 1st concept"
-              : !fusionB
-              ? `Select 2nd concept to fuse with "${
-                  nodes.find((n) => n.id === fusionA)?.title
-                }"`
-              : "Synapse Bridge active"}
-          </span>
-
-          {/* Surprise Pair Shortcut Button */}
-          {!fusionB && (
-            <button
-              onClick={handleSurprisePair}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "3px 8px",
-                borderRadius: 6,
-                background: "rgba(198, 244, 50, 0.15)",
-                border: "1px solid rgba(198, 244, 50, 0.3)",
-                color: "#C6F432",
-                fontSize: 11,
-                cursor: "pointer",
-                fontWeight: 600,
-              }}
-            >
-              <Dices size={12} />
-              <span>Surprise pair</span>
-            </button>
-          )}
-
-          <button
-            onClick={() => {
-              setFuseMode(false);
-              setFusionA(null);
-              setFusionB(null);
-              setFusionData(null);
-            }}
-            style={{
-              background: "none",
-              border: "none",
-              color: "#A1A1AA",
-              cursor: "pointer",
-              padding: 0,
-              marginLeft: 4,
-            }}
-          >
-            <X size={14} />
-          </button>
         </div>
       )}
 
@@ -2758,7 +2779,7 @@ export function StudyTerrarium({
       {fusionA && fusionB && (
         <div
           ref={inspectorScrollRef}
-          className="fixed inset-x-0 bottom-0 max-h-[65vh] overflow-y-auto rounded-t-2xl z-30 p-5 pb-safe md:pb-5 md:absolute md:left-auto md:top-[18px] md:right-[22px] md:bottom-[22px] md:w-[340px] md:max-h-[calc(100%-40px)] md:rounded-[18px] flex flex-col gap-3.5 no-scrollbar"
+          className="fixed inset-x-0 bottom-0 max-h-[72vh] overflow-y-auto rounded-t-2xl z-30 p-5 pb-safe md:pb-5 md:absolute md:left-auto md:top-[18px] md:right-[22px] md:bottom-[22px] md:w-[340px] md:max-h-[calc(100%-40px)] md:rounded-[18px] flex flex-col gap-3.5 no-scrollbar"
           style={{
             background: "rgba(15, 15, 18, 0.94)",
             backdropFilter: "blur(24px)",
@@ -3109,7 +3130,7 @@ export function StudyTerrarium({
       {!fuseMode && selectedConcept && (
         <div
           ref={inspectorScrollRef}
-          className="fixed inset-x-0 bottom-0 max-h-[65vh] overflow-y-auto rounded-t-2xl z-30 p-5 pb-safe md:pb-5 md:absolute md:left-auto md:top-[18px] md:right-[22px] md:bottom-[22px] md:w-[340px] md:max-h-[calc(100%-40px)] md:rounded-[18px] flex flex-col gap-3.5 no-scrollbar"
+          className="fixed inset-x-0 bottom-0 max-h-[72vh] overflow-y-auto rounded-t-2xl z-30 p-5 pb-safe md:pb-5 md:absolute md:left-auto md:top-[18px] md:right-[22px] md:bottom-[22px] md:w-[340px] md:max-h-[calc(100%-40px)] md:rounded-[18px] flex flex-col gap-3.5 no-scrollbar"
           style={{
             background: "rgba(15, 15, 18, 0.94)",
             backdropFilter: "blur(24px)",

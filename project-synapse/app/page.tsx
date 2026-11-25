@@ -3,12 +3,13 @@
 import React, { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowRight,
+  CalendarClock,
   ChevronDown,
   Compass,
   Sparkles,
-  Timer,
   Zap,
 } from "lucide-react";
 import { BrandLogo } from "@/components/brand-logo";
@@ -137,6 +138,7 @@ const FAQS = [
 ];
 
 export default function LandingPage() {
+  const router = useRouter();
   const [activeNav, setActiveNav] = useState("workflow");
   const [hasSession, setHasSession] = useState(false);
 
@@ -145,14 +147,13 @@ export default function LandingPage() {
   const [bridgeTag, setBridgeTag] = useState<"Hidden Link" | "Exam Trap">(
     "Hidden Link"
   );
-  const [decayDays, setDecayDays] = useState(4);
   const [card1Spot, setCard1Spot] = useState({ x: 50, y: 50, on: false });
 
   // Bento Card 2 state (Learn with Micu)
   const [micuTab, setMicuTab] = useState<MicuOption>("Explain");
 
   // Bento Card 3 state (Gesture Synth cursor depth stage)
-  const [depthPct, setDepthPct] = useState(66);
+  const [depthPct, setDepthPct] = useState(50);
   const [activeGestureChip, setActiveGestureChip] = useState<string>("pinch");
 
   // Editorial FAQ state
@@ -191,16 +192,36 @@ export default function LandingPage() {
   useEffect(() => {
     if (!supabase) return;
     let active = true;
+    const isOAuthReturn =
+      typeof window !== "undefined" &&
+      (window.location.hash.includes("access_token") ||
+        window.location.search.includes("code="));
+
     supabase.auth
       .getSession()
       .then(({ data }) => {
-        if (active) setHasSession(Boolean(data.session?.user));
+        if (!active) return;
+        const loggedIn = Boolean(data.session?.user);
+        setHasSession(loggedIn);
+        if (loggedIn && isOAuthReturn) {
+          router.replace("/workspace");
+        }
       })
       .catch(() => {});
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        if (active) setHasSession(Boolean(session?.user));
+        if (!active) return;
+        const loggedIn = Boolean(session?.user);
+        setHasSession(loggedIn);
+        if (
+          loggedIn &&
+          typeof window !== "undefined" &&
+          (window.location.hash.includes("access_token") ||
+            window.location.search.includes("code="))
+        ) {
+          router.replace("/workspace");
+        }
       }
     );
 
@@ -208,11 +229,11 @@ export default function LandingPage() {
       active = false;
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [router]);
 
   const workspaceHref = hasSession ? "/workspace" : "/login";
 
-  const decayedRetention = Math.max(24, Math.round(96 - decayDays * 2.2));
+  const clampedOrbLeft = Math.max(18, Math.min(82, depthPct));
 
   return (
     <ClickSpark
@@ -240,8 +261,8 @@ export default function LandingPage() {
         />
 
         {/* ── Floating Glass PillNav Header ──────────────────────────────── */}
-        <header className="fixed top-4 left-0 right-0 z-50 px-4">
-          <div className="max-w-5xl mx-auto h-14 px-3.5 sm:px-4 rounded-full bg-[#111214]/80 backdrop-blur-xl border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.55)] flex items-center justify-between gap-3">
+        <header className="fixed top-3 sm:top-4 left-0 right-0 z-50 px-3 sm:px-4">
+          <div className="max-w-5xl mx-auto px-3 sm:px-4 py-2 md:py-0 md:h-14 rounded-2xl md:rounded-full bg-[#111214]/85 backdrop-blur-xl border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.55)] flex flex-wrap md:flex-nowrap items-center justify-between gap-2 md:gap-3">
             <Link
               href="/"
               onClick={(e) => {
@@ -249,28 +270,30 @@ export default function LandingPage() {
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
               aria-label="SynapseSonic Home"
-              className="pl-1 shrink-0"
+              className="pl-0.5 sm:pl-1 shrink-0"
             >
               <BrandLogo size="sm" />
             </Link>
 
-            <PillNav
-              items={NAV_ITEMS}
-              activeId={activeNav}
-              onSelect={handleNavSelect}
-              className="hidden md:inline-flex"
-            />
+            <div className="order-3 md:order-none w-full md:w-auto flex justify-center">
+              <PillNav
+                items={NAV_ITEMS}
+                activeId={activeNav}
+                onSelect={handleNavSelect}
+                className="inline-flex max-w-full"
+              />
+            </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <Link
                 href="/login"
-                className="px-3.5 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:text-white border border-white/10 hover:border-white/25 transition-colors"
+                className="px-3 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:text-white border border-white/10 hover:border-white/25 transition-colors whitespace-nowrap"
               >
                 Sign in
               </Link>
               <Link
                 href={workspaceHref}
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#C6F432] text-[#0B0B0C] text-xs font-semibold hover:bg-[#d4f75c] transition-colors"
+                className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 rounded-full bg-[#C6F432] text-[#0B0B0C] text-xs font-semibold hover:bg-[#d4f75c] transition-colors whitespace-nowrap"
               >
                 <span>Open App</span>
               </Link>
@@ -431,69 +454,49 @@ export default function LandingPage() {
 
                   {/* Mini Fusion Graph + Telemetry Controls */}
                   <div className="relative z-10 rounded-xl bg-[#0B0B0C] border border-white/10 p-4 space-y-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2.5">
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3">
+                      <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
                         <span
-                          className="w-3.5 h-3.5 rounded-full transition-all"
-                          style={{
-                            background:
-                              decayedRetention > 65 ? "#C6F432" : "#F59E0B",
-                            boxShadow:
-                              decayedRetention > 65
-                                ? "0 0 12px #C6F432"
-                                : "0 0 10px #F59E0B",
-                            opacity: Math.max(0.45, decayedRetention / 100),
-                          }}
+                          className="w-3 h-3 rounded-full bg-[#C6F432] shadow-[0_0_12px_#C6F432]"
                         />
-                        <span className="text-xs font-medium text-white">
+                        <span className="text-xs font-medium text-white whitespace-nowrap">
                           Backpropagation
                         </span>
                       </div>
 
-                      <div className="flex-1 mx-2 relative h-6 flex items-center">
+                      <div className="w-full sm:flex-1 sm:mx-2 relative min-h-[24px] flex items-center justify-center">
                         <div
-                          className={`w-full h-[2px] transition-all duration-300 ${
+                          className={`absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] transition-all duration-300 ${
                             bridgeForged
                               ? "bg-[#C6F432] shadow-[0_0_10px_#C6F432]"
                               : "bg-white/10"
                           }`}
                         />
                         {bridgeForged && (
-                          <span className="absolute left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-[#141416] border border-[#C6F432]/50 text-[10px] font-mono text-[#C6F432] whitespace-nowrap">
+                          <span className="relative z-10 px-2.5 py-0.5 rounded-full bg-[#141416] border border-[#C6F432]/50 text-[10px] font-mono text-[#C6F432] whitespace-nowrap">
                             {bridgeTag}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-xs font-medium text-white">
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                        <span className="text-xs font-medium text-white whitespace-nowrap">
                           Gradient Descent
                         </span>
-                        <span className="w-3.5 h-3.5 rounded-full bg-[#C6F432] shadow-[0_0_12px_#C6F432]" />
+                        <span className="w-3 h-3 rounded-full bg-[#C6F432] shadow-[0_0_12px_#C6F432]" />
                       </div>
                     </div>
 
-                    <div className="pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-4">
+                    <div className="pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3">
                       <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-400">
                         <Compass className="w-3.5 h-3.5 text-[#C6F432]" />
                         <span>Study GPS: Focus Next Weak Node</span>
                       </div>
 
-                      <label className="flex items-center gap-2.5 text-[11px] font-mono text-zinc-300">
-                        <Timer className="w-3.5 h-3.5 text-[#C6F432]" />
-                        <span>Time-Decay</span>
-                        <input
-                          type="range"
-                          min={0}
-                          max={30}
-                          value={decayDays}
-                          onChange={(e) => setDecayDays(+e.target.value)}
-                          className="w-24 accent-[#C6F432] cursor-pointer"
-                        />
-                        <span className="text-[#C6F432] w-7 text-right">
-                          {decayDays}d
-                        </span>
-                      </label>
+                      <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#C6F432]/10 border border-[#C6F432]/25 text-[11px] font-mono text-[#C6F432]">
+                        <CalendarClock className="w-3.5 h-3.5" />
+                        <span>Automated Calendar Decay</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -604,15 +607,15 @@ export default function LandingPage() {
                     </div>
 
                     {/* Orb moving horizontally with scale proportional to depthPct */}
-                    <div className="relative flex-1 flex items-center">
+                    <div className="relative flex-1 flex items-center overflow-hidden">
                       <div
-                        className="absolute -translate-x-1/2 transition-all duration-150 ease-out flex flex-col items-center"
+                        className="absolute transition-all duration-150 ease-out flex flex-col items-center"
                         style={{
-                          left: `${depthPct}%`,
-                          transform: `translate(-50%, 0) scale(${0.72 + (depthPct / 100) * 0.45})`,
+                          left: `${clampedOrbLeft}%`,
+                          transform: `translate(-50%, 0) scale(${0.72 + (depthPct / 100) * 0.34})`,
                         }}
                       >
-                        <div className="w-20 h-20 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(198,244,50,0.48),rgba(198,244,50,0.08)_65%,transparent)] border border-[#C6F432]/70 shadow-[0_0_32px_rgba(198,244,50,0.28)] flex items-center justify-center">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[radial-gradient(circle_at_35%_35%,rgba(198,244,50,0.48),rgba(198,244,50,0.08)_65%,transparent)] border border-[#C6F432]/70 shadow-[0_0_32px_rgba(198,244,50,0.28)] flex items-center justify-center">
                           <Sparkles className="w-5 h-5 text-[#C6F432]" />
                         </div>
                         <span className="mt-1.5 text-[11px] font-medium text-white whitespace-nowrap">

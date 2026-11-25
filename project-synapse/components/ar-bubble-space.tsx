@@ -60,30 +60,33 @@ const HAND_CHAINS = [
 ];
 
 // ─── Wide Peripheral Frame Scatter + 30-Step Repulsion (Face-Clear Center) ────
-function calculateScatteredPositions(count: number): THREE.Vector3[] {
+function calculateScatteredPositions(count: number, viewWidth = 1200): THREE.Vector3[] {
   const positions: THREE.Vector3[] = [];
-  const minDistance = 2.25;
+  const isCompact = viewWidth < 768;
+  const maxX = isCompact ? 2.15 : 5.4;
+  const minCenterX = isCompact ? 0.95 : 1.95;
+  const minDistance = isCompact ? 1.55 : 2.25;
 
   // Peripheral wing/arc anchors keeping the user's face center clear
   const peripheralAnchors: [number, number, number][] = [
-    [-4.7, 1.65, -0.5],  // Top-left outer
-    [4.7, 1.65, -0.5],   // Top-right outer
-    [-2.5, 2.0, 0.5],    // Top-left upper arch
-    [2.5, 2.0, 0.5],     // Top-right upper arch
-    [-4.9, -0.35, 0.4],  // Mid-left outer
-    [4.9, -0.35, 0.4],   // Mid-right outer
-    [-2.7, -0.95, -1.2], // Bottom-left lower arc
-    [2.7, -0.95, -1.2],  // Bottom-right lower arc
+    [-(maxX * 0.85), 1.55, -0.5],  // Top-left outer
+    [maxX * 0.85, 1.55, -0.5],     // Top-right outer
+    [-(maxX * 0.46), 1.9, 0.5],    // Top-left upper arch
+    [maxX * 0.46, 1.9, 0.5],       // Top-right upper arch
+    [-(maxX * 0.88), -0.3, 0.4],   // Mid-left outer
+    [maxX * 0.88, -0.3, 0.4],      // Mid-right outer
+    [-(maxX * 0.5), -0.9, -1.1],   // Bottom-left lower arc
+    [maxX * 0.5, -0.9, -1.1],      // Bottom-right lower arc
   ];
 
   for (let i = 0; i < count; i++) {
     const anchor = peripheralAnchors[i % peripheralAnchors.length];
-    const ringBoost = Math.floor(i / peripheralAnchors.length) * 0.45;
+    const ringBoost = Math.floor(i / peripheralAnchors.length) * (isCompact ? 0.2 : 0.45);
     const xSign = anchor[0] >= 0 ? 1 : -1;
     const x = THREE.MathUtils.clamp(
-      anchor[0] + (Math.random() - 0.5) * 0.55 + xSign * ringBoost,
-      -5.4,
-      5.4
+      anchor[0] + (Math.random() - 0.5) * 0.45 + xSign * ringBoost,
+      -maxX,
+      maxX
     );
     const y = THREE.MathUtils.clamp(
       anchor[1] + (Math.random() - 0.5) * 0.35,
@@ -108,7 +111,7 @@ function calculateScatteredPositions(count: number): THREE.Vector3[] {
         const distXY = Math.hypot(diff.x, diff.y * 1.25);
         const dist3D = pA.distanceTo(pB);
 
-        if (dist3D < minDistance || distXY < 1.95) {
+        if (dist3D < minDistance || distXY < (isCompact ? 1.4 : 1.95)) {
           const pushDist = (minDistance - Math.max(0.01, dist3D)) * 0.5;
           const pushDir =
             diff.lengthSq() > 0.0001
@@ -123,11 +126,11 @@ function calculateScatteredPositions(count: number): THREE.Vector3[] {
 
     // Keep peripheral frame bounds & push out of user's central face zone
     for (const p of positions) {
-      if (Math.abs(p.x) < 1.9 && p.y > -0.65 && p.y < 1.65) {
+      if (Math.abs(p.x) < minCenterX && p.y > -0.65 && p.y < 1.65) {
         const side = p.x >= 0 ? 1 : -1;
-        p.x = side * 1.95;
+        p.x = side * minCenterX;
       }
-      p.x = THREE.MathUtils.clamp(p.x, -5.4, 5.4);
+      p.x = THREE.MathUtils.clamp(p.x, -maxX, maxX);
       p.y = THREE.MathUtils.clamp(p.y, -1.1, 2.2);
       p.z = THREE.MathUtils.clamp(p.z, -2.0, 1.2);
     }
@@ -553,12 +556,11 @@ export function ARBubbleSpace({
   const [cameraError, setCameraError] = useState<string | null>(null);
 
   const [pageIndex, setPageIndex] = useState(0);
-  const totalPages = Math.max(1, Math.ceil(allConcepts.length / ORBS_PER_PAGE));
+  const totalPages = 1;
 
   const pageConcepts = useMemo(() => {
-    const start = pageIndex * ORBS_PER_PAGE;
-    return allConcepts.slice(start, start + ORBS_PER_PAGE);
-  }, [allConcepts, pageIndex]);
+    return allConcepts;
+  }, [allConcepts]);
 
   // Quiz Lens Active State
   const [activeQuizNode, setActiveQuizNode] = useState<Concept | null>(null);
@@ -950,7 +952,7 @@ export function ARBubbleSpace({
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 100);
-    camera.position.set(0, 0, 10);
+    camera.position.set(0, 0, width < 768 ? 12 : 10);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({
@@ -1038,8 +1040,9 @@ export function ARBubbleSpace({
     const sphereGeo = new THREE.SphereGeometry(orbRadius * 1.15, 32, 32);
     const coreGeo = new THREE.SphereGeometry(orbRadius * 0.92, 24, 24);
 
-    // Calculate wide clean positions with at least 2.3 units separation
-    const initialPositions = calculateScatteredPositions(pageConcepts.length);
+    // Calculate wide clean positions scaled cleanly for current viewport width
+    const viewW = containerRef.current?.clientWidth || window.innerWidth;
+    const initialPositions = calculateScatteredPositions(pageConcepts.length, viewW);
 
     pageConcepts.forEach((c, idx) => {
       const mastery = c.retention || 0;
@@ -1725,9 +1728,10 @@ export function ARBubbleSpace({
               orb.vel.z += Math.sin(timeSec * 1.0 + orbIdx * 2.1) * 0.0008;
               orb.pos.add(orb.vel);
 
-              // Wide Peripheral Room Bounds: x in [-5.5, 5.5], y in [-1.15, 2.25], z in [-2.4, 1.4]
-              if (orb.pos.x < -5.5) orb.vel.x += (-5.5 - orb.pos.x) * 0.08;
-              if (orb.pos.x > 5.5) orb.vel.x += (5.5 - orb.pos.x) * 0.08;
+              // Room bounds clamped tighter on portrait/mobile viewports
+              const xBound = cssW < 768 ? 2.25 : 5.5;
+              if (orb.pos.x < -xBound) orb.vel.x += (-xBound - orb.pos.x) * 0.08;
+              if (orb.pos.x > xBound) orb.vel.x += (xBound - orb.pos.x) * 0.08;
               if (orb.pos.y < -1.15) orb.vel.y += (-1.15 - orb.pos.y) * 0.08;
               if (orb.pos.y > 2.25) orb.vel.y += (2.25 - orb.pos.y) * 0.08;
               if (orb.pos.z < -2.4) orb.vel.z += (-2.4 - orb.pos.z) * 0.08;
@@ -2223,9 +2227,16 @@ export function ARBubbleSpace({
           btnDwellStartRef.current = null;
           setHoldingFingerInfo(null);
           setDwellPodInfo(null);
+          const isCoarsePointer =
+            typeof window !== "undefined" &&
+            window.matchMedia?.("(pointer: coarse)").matches;
           setTelemetry({
-            emoji: cameraActive ? "👋" : "🖱️",
-            text: cameraActive ? "Show hand to control · Mouse controls active" : "Mouse & click controls active",
+            emoji: cameraActive ? "👋" : isCoarsePointer ? "👆" : "🖱️",
+            text: cameraActive
+              ? "Show hand to control · Touch/mouse active"
+              : isCoarsePointer
+                ? "Tap orbs to inspect • Enable AR for hand gestures"
+                : "Mouse & click controls active",
             progress: 0,
           });
         }
@@ -2521,7 +2532,7 @@ export function ARBubbleSpace({
           <div className="pointer-events-auto flex-1 min-h-0 flex flex-col items-center justify-center overflow-y-auto no-scrollbar gap-2 md:block md:overflow-visible md:absolute md:inset-0 md:z-[25]">
             {/* Central Question Lens */}
             <div
-              className="w-full max-w-[94vw] md:w-[min(92vw,520px)] md:max-h-[calc(100vh-220px)] overflow-y-auto no-scrollbar md:absolute md:left-1/2 md:bottom-[96px] md:-translate-x-1/2 p-4 md:px-6 md:py-5 rounded-3xl flex flex-col items-center text-center gap-2.5"
+              className="w-full max-w-[94vw] max-h-[54vh] md:w-[min(92vw,520px)] md:max-h-[calc(100vh-220px)] overflow-y-auto no-scrollbar md:absolute md:left-1/2 md:bottom-[96px] md:-translate-x-1/2 p-3.5 md:px-6 md:py-5 rounded-3xl flex flex-col items-center text-center gap-2 md:gap-2.5"
               style={{
                 background: "rgba(12, 12, 16, 0.84)",
                 backdropFilter: "blur(24px)",
@@ -2638,7 +2649,7 @@ export function ARBubbleSpace({
                         data-quiz-option={i}
                         disabled={quizAnsweredIndex !== null}
                         onClick={() => handleSelectQuizOption(i)}
-                        className="w-full rounded-xl px-3 py-2.5 flex items-center gap-2.5 text-left transition-colors"
+                        className="w-full rounded-xl py-2 px-3 flex items-center gap-2.5 text-left transition-colors"
                         style={{
                           background: bg,
                           border: `1px solid ${borderColor}`,
@@ -2933,7 +2944,7 @@ export function ARBubbleSpace({
           className="pointer-events-auto shrink-0 mx-auto w-full md:w-auto flex flex-col items-center gap-1.5 md:gap-2 pb-safe md:pb-0 md:absolute md:bottom-6 md:left-1/2 md:-translate-x-1/2 z-30"
         >
           <div
-            className="flex flex-wrap md:flex-nowrap items-center justify-center gap-1.5 max-w-full rounded-full px-2.5 py-1.5 md:px-3"
+            className="flex flex-nowrap items-center justify-center gap-1.5 max-w-full rounded-full px-2.5 py-1.5 md:px-3"
             style={{
               background: "rgba(18, 18, 21, 0.85)",
               backdropFilter: "blur(20px)",
@@ -2947,7 +2958,7 @@ export function ARBubbleSpace({
               data-dock-action="camera"
               disabled={cameraLoading}
               onClick={() => (cameraActive ? stopCamera() : startCamera())}
-              className="inline-flex items-center gap-1.5 text-xs px-3 py-2 md:py-1.5 rounded-full font-semibold cursor-pointer transition-all"
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-2 md:py-1.5 rounded-full font-semibold cursor-pointer transition-all whitespace-nowrap"
               style={{
                 background: cameraActive ? "rgba(198, 244, 50, 0.16)" : "transparent",
                 border: `1px solid ${cameraActive ? "rgba(198, 244, 50, 0.4)" : "transparent"}`,
@@ -2955,14 +2966,19 @@ export function ARBubbleSpace({
               }}
             >
               {cameraActive ? <Camera size={13} /> : <CameraOff size={13} />}
-              <span>{cameraLoading ? "Starting…" : cameraActive ? "AR Camera Live" : "Enable AR Camera"}</span>
+              <span className="md:hidden">
+                {cameraLoading ? "Starting…" : cameraActive ? "AR Live" : "AR Camera"}
+              </span>
+              <span className="hidden md:inline">
+                {cameraLoading ? "Starting…" : cameraActive ? "AR Camera Live" : "Enable AR Camera"}
+              </span>
             </button>
 
             {/* Gather Orbs Button */}
             <button
               data-dock-action="gather"
               onClick={handleGatherOrbs}
-              className="inline-flex items-center gap-1.5 text-xs px-3 py-2 md:py-1.5 rounded-full font-semibold cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-2 md:py-1.5 rounded-full font-semibold cursor-pointer whitespace-nowrap"
               style={{
                 background: "transparent",
                 border: "1px solid transparent",
@@ -2970,14 +2986,15 @@ export function ARBubbleSpace({
               }}
             >
               <Magnet size={13} color="#C6F432" />
-              <span>Gather Orbs</span>
+              <span className="md:hidden">Gather</span>
+              <span className="hidden md:inline">Gather Orbs</span>
             </button>
 
             {/* Synth Sound Toggle */}
             <button
               data-dock-action="mute"
               onClick={onToggleMute}
-              className="inline-flex items-center gap-1.5 text-xs px-3 py-2 md:py-1.5 rounded-full font-semibold cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-2 md:py-1.5 rounded-full font-semibold cursor-pointer whitespace-nowrap"
               style={{
                 background: "transparent",
                 border: "1px solid transparent",
@@ -2985,70 +3002,9 @@ export function ARBubbleSpace({
               }}
             >
               {synthMuted ? <VolumeX size={13} /> : <Volume2 size={13} color="#C6F432" />}
-              <span>{synthMuted ? "Muted" : "Synth Sound"}</span>
+              <span className="md:hidden">{synthMuted ? "Muted" : "Sound"}</span>
+              <span className="hidden md:inline">{synthMuted ? "Muted" : "Synth Sound"}</span>
             </button>
-
-            {/* Compact Page Pager when nodes > 8 */}
-            {totalPages > 1 && (
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 4,
-                  paddingLeft: 8,
-                  borderLeft: "1px solid rgba(255, 255, 255, 0.1)",
-                }}
-              >
-                <button
-                  data-dock-action="pager-prev"
-                  disabled={pageIndex === 0}
-                  onClick={() => {
-                    synthRef.current.playTossWhoosh();
-                    setPageIndex((p) => Math.max(0, p - 1));
-                  }}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: pageIndex === 0 ? "#52525B" : "#FAFAFA",
-                    cursor: pageIndex === 0 ? "default" : "pointer",
-                    display: "grid",
-                    placeItems: "center",
-                    padding: 2,
-                  }}
-                >
-                  <ChevronLeft size={14} />
-                </button>
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontFamily: "ui-monospace, monospace",
-                    color: "#A1A1AA",
-                    padding: "0 2px",
-                  }}
-                >
-                  {pageIndex + 1}/{totalPages}
-                </span>
-                <button
-                  data-dock-action="pager-next"
-                  disabled={pageIndex === totalPages - 1}
-                  onClick={() => {
-                    synthRef.current.playTossWhoosh();
-                    setPageIndex((p) => Math.min(totalPages - 1, p + 1));
-                  }}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: pageIndex === totalPages - 1 ? "#52525B" : "#FAFAFA",
-                    cursor: pageIndex === totalPages - 1 ? "default" : "pointer",
-                    display: "grid",
-                    placeItems: "center",
-                    padding: 2,
-                  }}
-                >
-                  <ChevronRight size={14} />
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Dynamic Contextual Status Hint */}

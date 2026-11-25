@@ -695,7 +695,12 @@ export function MicuTutorSpace({
             overflow-x: auto;
             scrollbar-width: none;
             -ms-overflow-style: none;
-            padding: 6px 8px;
+            padding: 6px 26px 6px 8px;
+            gap: 6px;
+          }
+          .mts-dock .mts-dock-btn {
+            padding: 8px 10px;
+            font-size: 12px;
           }
           .mts-dock::-webkit-scrollbar { display: none; }
           .mts-history-drawer {
@@ -1583,8 +1588,9 @@ export function MicuTutorSpace({
               </form>
             )}
 
-            {/* Single-row floating dock */}
-            <div className="mts-dock">
+            {/* Single-row floating dock with right-edge scroll fade on mobile */}
+            <div className="relative w-full">
+              <div className="mts-dock">
               {/* Primary action */}
               {tutorState === "speaking" ? (
                 <button
@@ -1665,6 +1671,15 @@ export function MicuTutorSpace({
               >
                 Test me
               </button>
+              </div>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none md:hidden absolute right-0 top-[1px] bottom-[1px] w-8 rounded-r-[18px]"
+                style={{
+                  background:
+                    "linear-gradient(to left, rgba(24, 24, 27, 0.96), rgba(24, 24, 27, 0))",
+                }}
+              />
             </div>
           </div>
 
