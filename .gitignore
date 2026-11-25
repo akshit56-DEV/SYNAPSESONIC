@@ -2,5 +2,7 @@ node_modules/
 **/node_modules/
 .next/
 **/.next/
+.vercel/
+**/.vercel/
 .env*.local
 **/.env*.local

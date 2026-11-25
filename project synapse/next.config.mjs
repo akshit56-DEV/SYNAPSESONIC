@@ -55,9 +55,6 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // Ensure public folder files are copied to build output
-  output: 'standalone',
-  // Copy public folder to standalone output
   async rewrites() {
     return [
       {
