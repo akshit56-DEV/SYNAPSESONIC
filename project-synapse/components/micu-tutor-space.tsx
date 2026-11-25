@@ -217,6 +217,31 @@ export function MicuTutorSpace({
   const activeWordRef = useRef<HTMLSpanElement | null>(null);
   const audioStartEpochRef = useRef<number>(0);
   const audioDurationRef = useRef<number>(0);
+  const playbackSeqRef = useRef<number>(0);
+  const htmlAudioRef = useRef<HTMLAudioElement | null>(null);
+  const fallbackEndTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Unlock Web Audio synchronously inside user tap/click so async fetches work on mobile Safari/Chrome
+  const unlockAudio = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const AudioCtx =
+      window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new AudioCtx();
+    }
+    const ctx = audioCtxRef.current;
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+    try {
+      const silent = ctx.createBuffer(1, 1, 22050);
+      const src = ctx.createBufferSource();
+      src.buffer = silent;
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch {}
+  }, []);
 
   // ── Mastery helper ──────────────────────────────────────────────────────────
   const getMastery = (i: number) =>
@@ -224,6 +249,7 @@ export function MicuTutorSpace({
 
   // ── Comprehensive Audio Cancel ──────────────────────────────────────────────
   const stopSpeech = useCallback(() => {
+    playbackSeqRef.current++;
     if (audioSourceRef.current) {
       try {
         audioSourceRef.current.stop();
@@ -231,12 +257,23 @@ export function MicuTutorSpace({
       } catch {}
       audioSourceRef.current = null;
     }
+    if (htmlAudioRef.current) {
+      try {
+        htmlAudioRef.current.pause();
+        htmlAudioRef.current.src = "";
+      } catch {}
+      htmlAudioRef.current = null;
+    }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
     if (streamTimerRef.current) {
       clearInterval(streamTimerRef.current);
       streamTimerRef.current = null;
+    }
+    if (fallbackEndTimerRef.current) {
+      clearTimeout(fallbackEndTimerRef.current);
+      fallbackEndTimerRef.current = null;
     }
     setAudioVolume(0);
     audioDurationRef.current = 0;
@@ -279,16 +316,26 @@ export function MicuTutorSpace({
   const speakText = useCallback(
     async (textToSpeak: string) => {
       cancelAllAudio();
+      unlockAudio();
+      const seq = ++playbackSeqRef.current;
       setTutorState("speaking");
       setActiveText(textToSpeak);
       setRevealedWordIndex(0);
       const words = textToSpeak.split(" ");
       const totalWords = words.length;
 
-      const runBrowserFallback = () => {
+      const runBrowserFallback = (notice?: string) => {
+        if (seq !== playbackSeqRef.current) return;
+        if (notice) {
+          setStatusMessage(notice);
+          setTimeout(() => setStatusMessage(""), 4200);
+        }
         setTutorState("speaking");
-        if (typeof window === "undefined" || !("speechSynthesis" in window))
+        if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+          setTutorState("idle");
+          setRevealedWordIndex(totalWords);
           return;
+        }
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(textToSpeak);
         utterance.rate = 0.96 * speechSpeed;
@@ -311,11 +358,29 @@ export function MicuTutorSpace({
             streamTimerRef.current = null;
           }
         }, intervalMs);
-        utterance.onend = () => {
-          setTutorState("idle");
-          setRevealedWordIndex(totalWords);
+
+        const finishFallback = () => {
+          if (fallbackEndTimerRef.current) {
+            clearTimeout(fallbackEndTimerRef.current);
+            fallbackEndTimerRef.current = null;
+          }
+          if (streamTimerRef.current) {
+            clearInterval(streamTimerRef.current);
+            streamTimerRef.current = null;
+          }
+          if (seq === playbackSeqRef.current) {
+            setTutorState("idle");
+            setRevealedWordIndex(totalWords);
+          }
         };
-        utterance.onerror = () => setTutorState("idle");
+
+        // Guard against Android/iOS Chrome hanging without firing utterance.onend
+        fallbackEndTimerRef.current = setTimeout(
+          finishFallback,
+          Math.max(3000, totalWords * intervalMs + 2500)
+        );
+        utterance.onend = finishFallback;
+        utterance.onerror = finishFallback;
         window.speechSynthesis.speak(utterance);
       };
 
@@ -325,42 +390,85 @@ export function MicuTutorSpace({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: textToSpeak }),
         });
+        if (seq !== playbackSeqRef.current) return;
+
         if (!response.ok) {
-          runBrowserFallback();
+          const errPayload = await response.json().catch(() => ({}));
+          const code = errPayload?.code;
+          const notice =
+            code === "quota_exceeded"
+              ? "ElevenLabs credits used up — using device voice"
+              : code === "missing_api_key"
+                ? "ElevenLabs key not configured — using device voice"
+                : undefined;
+          runBrowserFallback(notice);
           return;
         }
+
         const arrayBuffer = await response.arrayBuffer();
+        if (seq !== playbackSeqRef.current) return;
+
         const AudioCtx =
           window.AudioContext || (window as any).webkitAudioContext;
-        if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
-        const ctx = audioCtxRef.current;
-        if (ctx.state === "suspended") await ctx.resume();
-        const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-        const source = ctx.createBufferSource();
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 64;
-        source.buffer = audioBuffer;
-        source.playbackRate.value = speechSpeed;
-        source.connect(analyser);
-        analyser.connect(ctx.destination);
-        audioSourceRef.current = source;
-        analyserRef.current = analyser;
-        audioDurationRef.current = audioBuffer.duration / speechSpeed;
-        audioStartEpochRef.current = ctx.currentTime;
-        source.onended = () => {
-          setTutorState("idle");
-          setRevealedWordIndex(totalWords);
-          audioSourceRef.current = null;
-          audioDurationRef.current = 0;
+        if (AudioCtx) {
+          try {
+            if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
+            const ctx = audioCtxRef.current;
+            if (ctx.state === "suspended") await ctx.resume();
+            const audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+            if (seq !== playbackSeqRef.current) return;
+            const source = ctx.createBufferSource();
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 64;
+            source.buffer = audioBuffer;
+            source.playbackRate.value = speechSpeed;
+            source.connect(analyser);
+            analyser.connect(ctx.destination);
+            audioSourceRef.current = source;
+            analyserRef.current = analyser;
+            audioDurationRef.current = audioBuffer.duration / speechSpeed;
+            audioStartEpochRef.current = ctx.currentTime;
+            source.onended = () => {
+              if (seq === playbackSeqRef.current) {
+                setTutorState("idle");
+                setRevealedWordIndex(totalWords);
+                audioSourceRef.current = null;
+                audioDurationRef.current = 0;
+              }
+            };
+            source.start();
+            setTutorState("speaking");
+            return;
+          } catch {
+            // Fall through to HTMLAudioElement if WebAudio decode/resume fails
+          }
+        }
+
+        const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
+        const url = URL.createObjectURL(blob);
+        const el = new Audio(url);
+        el.playbackRate = speechSpeed;
+        htmlAudioRef.current = el;
+        el.onended = () => {
+          URL.revokeObjectURL(url);
+          if (seq === playbackSeqRef.current) {
+            setTutorState("idle");
+            setRevealedWordIndex(totalWords);
+            htmlAudioRef.current = null;
+          }
         };
-        source.start();
+        el.onerror = () => {
+          URL.revokeObjectURL(url);
+          runBrowserFallback();
+        };
+        await el.play();
         setTutorState("speaking");
       } catch (err) {
         console.warn("Speech API error, using browser fallback:", err);
         runBrowserFallback();
       }
     },
-    [speechSpeed, cancelAllAudio]
+    [speechSpeed, cancelAllAudio, unlockAudio]
   );
 
   // ── Micu AI Chat Call ───────────────────────────────────────────────────────
@@ -371,6 +479,7 @@ export function MicuTutorSpace({
     ) => {
       if (!activeNode) return;
       cancelAllAudio();
+      unlockAudio();
       setTutorState("thinking");
       setHasError(false);
       const taskLabel =
@@ -440,19 +549,20 @@ export function MicuTutorSpace({
         await speakText(fallback);
       }
     },
-    [activeNode, speakText, cancelAllAudio]
+    [activeNode, speakText, cancelAllAudio, unlockAudio]
   );
 
   // ── Explain (standard) ──────────────────────────────────────────────────────
   const handleExplain = useCallback(() => {
     if (!activeNode) return;
+    unlockAudio();
     const text = `${activeNode.title}. ${activeNode.summary}`;
     setLoadingTask("Explaining...");
     setHasError(false);
     speakText(text).finally(() => {
       setLoadingTask(null);
     });
-  }, [activeNode, speakText]);
+  }, [activeNode, speakText, unlockAudio]);
 
   // ── Audio-Reactive RAF Volume Loop ──────────────────────────────────────────
   useEffect(() => {
