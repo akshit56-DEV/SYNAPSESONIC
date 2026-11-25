@@ -24,9 +24,10 @@ import {
   Plus,
   Dices,
   RefreshCw,
-  RotateCcw as ResetIcon,
+  FileUp,
 } from "lucide-react";
 import type { Concept } from "./decks";
+import { Particles } from "./motion/Particles";
 
 export type SynapseKind = "base" | "branch" | "forged";
 
@@ -69,6 +70,17 @@ interface StudyTerrariumProps {
   onResetDay?: () => void;
   onJumpToTutor?: (conceptIndex?: number) => void;
   onJumpToAR?: (conceptIndex?: number) => void;
+  onOpenUpload?: () => void;
+  onLoadSample?: () => void;
+}
+
+function matchesFilterMode(
+  mastery: number,
+  mode: "all" | "weak" | "mastered"
+): boolean {
+  if (mode === "weak") return mastery < 80;
+  if (mode === "mastered") return mastery >= 80;
+  return true;
 }
 
 // ── Color Utilities ───────────────────────────────────────────────────────────
@@ -313,9 +325,10 @@ export function StudyTerrarium({
   onUpdateMastery,
   onAddSubconcepts,
   onForgeSynapse,
-  onResetDay,
   onJumpToTutor,
   onJumpToAR,
+  onOpenUpload,
+  onLoadSample,
 }: StudyTerrariumProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const inspectorScrollRef = useRef<HTMLDivElement>(null);
@@ -400,6 +413,25 @@ export function StudyTerrarium({
   const hoveredNodeIdRef = useRef(hoveredNodeId);
   hoveredNodeIdRef.current = hoveredNodeId;
 
+  const selectedNodeIdRef = useRef(selectedNodeId);
+  selectedNodeIdRef.current = selectedNodeId;
+
+  const filterModeRef = useRef(filterMode);
+  filterModeRef.current = filterMode;
+
+  const forgedSynapsesRef = useRef(forgedSynapses);
+  forgedSynapsesRef.current = forgedSynapses;
+
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+
+  const handleOrbClickRef = useRef<(nodeId: string, shiftKey: boolean) => void>(
+    () => {}
+  );
+  const handleOpenSavedBridgeRef = useRef<(bridge: ForgedSynapse) => void>(
+    () => {}
+  );
+
   // Surprise / Try Another Pair Rotation Ref
   const recentPairsRef = useRef<Set<string>>(new Set());
 
@@ -457,7 +489,7 @@ export function StudyTerrarium({
     const weakList = scored
       .filter((x) => x.mastery < 80)
       .sort((a, b) => a.mastery - b.mastery);
-    const pool = weakList.length >= 3 ? weakList : scored;
+    const pool = weakList.length > 0 ? weakList : scored;
     return pool.slice(0, 5);
   }, [nodes, values]);
 
@@ -480,10 +512,15 @@ export function StudyTerrarium({
       const obj = nodeObjectsRef.current.get(nodeId);
       if (!obj || !cameraRef.current) return;
 
-      const targetLook = obj.targetPos.clone();
+      const worldPos = new THREE.Vector3();
+      obj.mesh.getWorldPosition(worldPos);
+      const targetLook = worldPos.clone();
       if (hasRightDrawer) {
-        // Shift camera lookAt to right so sphere sits in open left area
-        targetLook.x += 1.8;
+        // Offset along camera's right vector so orb sits clearly left of inspector
+        const rightVec = new THREE.Vector3(1, 0, 0).applyQuaternion(
+          cameraRef.current.quaternion
+        );
+        targetLook.addScaledVector(rightVec, 1.5);
       }
 
       const currentDist = cameraRef.current.position.distanceTo(targetLook);
@@ -506,9 +543,15 @@ export function StudyTerrarium({
       const objB = nodeObjectsRef.current.get(idB);
       if (!objA || !objB || !cameraRef.current) return;
 
-      const mid = objA.targetPos.clone().add(objB.targetPos).multiplyScalar(0.5);
-      const dist = objA.targetPos.distanceTo(objB.targetPos);
+      const worldA = new THREE.Vector3();
+      const worldB = new THREE.Vector3();
+      objA.mesh.getWorldPosition(worldA);
+      objB.mesh.getWorldPosition(worldB);
+
+      const mid = worldA.clone().add(worldB).multiplyScalar(0.5);
+      const dist = worldA.distanceTo(worldB);
       const dir = cameraRef.current.position.clone().sub(mid).normalize();
+      if (dir.lengthSq() < 0.001) dir.set(0, 0, 1);
       const distOffset = Math.max(7.2, dist * 1.85);
       const camPos = mid.clone().add(dir.multiplyScalar(distOffset));
       smoothFrame(camPos, mid);
@@ -518,12 +561,44 @@ export function StudyTerrarium({
 
   const handleResetView = useCallback(() => {
     cancelCameraTransition();
-    smoothFrame(new THREE.Vector3(0, 4, 18), new THREE.Vector3(0, 0, 0));
+    setAutoRotate(false);
+    setFilterMode("all");
+    if (sceneRef.current) {
+      sceneRef.current.rotation.y = 0;
+    }
+    smoothFrame(new THREE.Vector3(0, 5, 19), new THREE.Vector3(0, 0, 0));
     setSelectedNodeId(null);
     setFusionA(null);
     setFusionB(null);
     setFusionData(null);
   }, [cancelCameraTransition, smoothFrame]);
+
+  // Clear stale selection/fusion state cleanly when deck switches or empties
+  const deckNodeSignature = useMemo(
+    () => nodes.map((n) => n.id).join("|"),
+    [nodes]
+  );
+  useEffect(() => {
+    const idSet = new Set(nodes.map((n) => n.id));
+    if (selectedNodeIdRef.current && !idSet.has(selectedNodeIdRef.current)) {
+      setSelectedNodeId(null);
+    }
+    if (
+      (fusionARef.current && !idSet.has(fusionARef.current)) ||
+      (fusionBRef.current && !idSet.has(fusionBRef.current))
+    ) {
+      setFuseMode(false);
+      setFusionA(null);
+      setFusionB(null);
+      setFusionData(null);
+    }
+    if (nodes.length === 0) {
+      setStudyPathActive(false);
+      setStudyPathIndex(0);
+      setLabelCoords([]);
+      setBridgePillCoords([]);
+    }
+  }, [deckTitle, deckNodeSignature, nodes]);
 
   // ── Fix Stale Quiz Leak Between Nodes ───────────────────────────────────────
   useEffect(() => {
@@ -554,10 +629,9 @@ export function StudyTerrarium({
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    // 1. Scene
+    // 1. Scene (transparent so React Bits Particles layer glows behind orbs)
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#0B0B0C");
-    scene.fog = new THREE.FogExp2("#0B0B0C", 0.016);
+    scene.background = null;
     sceneRef.current = scene;
 
     // 2. Camera with enforced comfortable depth
@@ -571,6 +645,8 @@ export function StudyTerrarium({
       alpha: true,
       powerPreference: "high-performance",
     });
+    renderer.setClearColor(0x000000, 0);
+    renderer.domElement.style.background = "transparent";
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -668,14 +744,16 @@ export function StudyTerrarium({
 
       const clickableMeshes: THREE.Mesh[] = [];
       nodeObjectsRef.current.forEach((obj) => {
-        clickableMeshes.push(obj.mesh);
+        if (!obj.mesh.userData.filteredOut) {
+          clickableMeshes.push(obj.mesh);
+        }
       });
 
       const hits = raycaster.intersectObjects(clickableMeshes, false);
       if (hits.length > 0) {
         const clickedId = hits[0].object.userData.nodeId;
         if (clickedId) {
-          handleOrbClick(clickedId, e.shiftKey);
+          handleOrbClickRef.current(clickedId, e.shiftKey);
           return;
         }
       }
@@ -692,7 +770,9 @@ export function StudyTerrarium({
       if (arcLines.length > 0) {
         const arcHits = raycaster.intersectObjects(arcLines, false);
         if (arcHits.length > 0 && arcHits[0].object.userData?.forgedSynapse) {
-          handleOpenSavedBridge(arcHits[0].object.userData.forgedSynapse);
+          handleOpenSavedBridgeRef.current(
+            arcHits[0].object.userData.forgedSynapse
+          );
           return;
         }
       }
@@ -711,15 +791,22 @@ export function StudyTerrarium({
       raycaster.setFromCamera(pointer, camera);
       const clickableMeshes: THREE.Mesh[] = [];
       nodeObjectsRef.current.forEach((obj) => {
-        clickableMeshes.push(obj.mesh);
+        if (!obj.mesh.userData.filteredOut) {
+          clickableMeshes.push(obj.mesh);
+        }
       });
 
       const hits = raycaster.intersectObjects(clickableMeshes, false);
-      const nextHoverId = hits.length > 0 ? (hits[0].object.userData.nodeId as string) : null;
+      const nextHoverId =
+        hits.length > 0 ? (hits[0].object.userData.nodeId as string) : null;
       if (hoveredNodeIdRef.current !== nextHoverId) {
         hoveredNodeIdRef.current = nextHoverId;
         setHoveredNodeId(nextHoverId);
-        renderer.domElement.style.cursor = nextHoverId ? "pointer" : "grab";
+        renderer.domElement.style.cursor = nextHoverId
+          ? "pointer"
+          : nodesRef.current.length > 0
+            ? "grab"
+            : "default";
       }
     };
 
@@ -734,6 +821,11 @@ export function StudyTerrarium({
     const startTime = lastTime;
     let lastLabelUpdate = 0;
 
+    const tmpWorldPos = new THREE.Vector3();
+    const tmpMid = new THREE.Vector3();
+    const tmpWorldA = new THREE.Vector3();
+    const tmpWorldB = new THREE.Vector3();
+
     const animate = () => {
       animId = requestAnimationFrame(animate);
       const now = performance.now();
@@ -745,6 +837,7 @@ export function StudyTerrarium({
       if (autoRotateRef.current && !isCameraLerpingRef.current) {
         scene.rotation.y += delta * 0.08;
       }
+      scene.updateMatrixWorld();
 
       // Smooth camera lerp
       if (isCameraLerpingRef.current && cameraRef.current && controlsRef.current) {
@@ -762,6 +855,10 @@ export function StudyTerrarium({
       }
 
       controls.update();
+
+      const viewW = container.clientWidth || width;
+      const viewH = container.clientHeight || height;
+      const activeFilter = filterModeRef.current;
 
       // Update Node 3D Objects
       const coords: Array<{
@@ -788,7 +885,7 @@ export function StudyTerrarium({
         }
 
         const isTarget =
-          nodeId === selectedNodeId ||
+          nodeId === selectedNodeIdRef.current ||
           nodeId === hoveredNodeIdRef.current ||
           nodeId === fusionARef.current ||
           nodeId === fusionBRef.current;
@@ -801,10 +898,14 @@ export function StudyTerrarium({
 
         obj.ringMesh.rotation.z = elapsed * 0.4;
 
-        // Project position to 2D screen space
-        const screenV = obj.currentPos.clone().project(camera);
-        const halfW = width / 2;
-        const halfH = height / 2;
+        const nodeMastery = obj.mesh.userData.mastery ?? 0;
+        const isFilteredIn = matchesFilterMode(nodeMastery, activeFilter);
+
+        // Project world position to 2D screen space (respects scene.rotation.y)
+        obj.mesh.getWorldPosition(tmpWorldPos);
+        const screenV = tmpWorldPos.clone().project(camera);
+        const halfW = viewW / 2;
+        const halfH = viewH / 2;
         const sx = screenV.x * halfW + halfW;
         const sy = -(screenV.y * halfH) + halfH;
         const isBehind = screenV.z > 1;
@@ -816,14 +917,79 @@ export function StudyTerrarium({
           x: validCoords ? sx : 0,
           y: validCoords ? sy : 0,
           visible:
-            !isBehind && validCoords && sx > -40 && sx < width + 40 && sy > -40 && sy < height + 40,
-          mastery: obj.mesh.userData.mastery ?? 0,
+            isFilteredIn &&
+            !isBehind &&
+            validCoords &&
+            sx > -40 &&
+            sx < viewW + 40 &&
+            sy > -40 &&
+            sy < viewH + 40,
+          mastery: nodeMastery,
         });
       });
 
       if (now - lastLabelUpdate > 45) {
         lastLabelUpdate = now;
         setLabelCoords(coords);
+
+        const genuineForged = forgedSynapsesRef.current.filter(
+          (fs) =>
+            fs.kind === "forged" ||
+            (fs.isCustom && fs.kind !== "branch" && fs.label !== "Sub-concept")
+        );
+
+        if (genuineForged.length > 0 && nodeObjectsRef.current.size > 0) {
+          const pills: Array<{
+            key: string;
+            label: string;
+            x: number;
+            y: number;
+            visible: boolean;
+            bridge: ForgedSynapse;
+          }> = [];
+
+          genuineForged.forEach((fs) => {
+            const objA = nodeObjectsRef.current.get(fs.sourceId);
+            const objB = nodeObjectsRef.current.get(fs.targetId);
+            if (!objA || !objB) return;
+
+            const showPair =
+              activeFilter === "all" ||
+              !objA.mesh.userData.filteredOut ||
+              !objB.mesh.userData.filteredOut;
+            if (!showPair) return;
+
+            tmpMid
+              .copy(objA.currentPos)
+              .add(objB.currentPos)
+              .multiplyScalar(0.5);
+            tmpWorldA.copy(tmpMid).normalize().multiplyScalar(1.8);
+            tmpWorldB.copy(tmpMid).add(tmpWorldA).applyMatrix4(scene.matrixWorld);
+
+            const sv = tmpWorldB.project(camera);
+            const px = sv.x * (viewW / 2) + viewW / 2;
+            const py = -(sv.y * (viewH / 2)) + viewH / 2;
+            const behind = sv.z > 1;
+
+            pills.push({
+              key: `${fs.sourceId}-${fs.targetId}`,
+              label: fs.label,
+              x: px,
+              y: py,
+              visible:
+                !behind &&
+                Number.isFinite(px) &&
+                Number.isFinite(py) &&
+                px > 0 &&
+                px < viewW &&
+                py > 0 &&
+                py < viewH,
+              bridge: fs,
+            });
+          });
+
+          setBridgePillCoords(pills);
+        }
       }
 
       // Live Aim-to-Fuse Preview Beam Update
@@ -1021,6 +1187,46 @@ export function StudyTerrarium({
     });
   }, [nodes, values, targetPositions]);
 
+  // ── Apply Filter Mode Visually Across Orbs & Links ──────────────────────────
+  useEffect(() => {
+    nodeObjectsRef.current.forEach((obj, nodeId) => {
+      const mastery = obj.mesh.userData.mastery ?? 0;
+      const theme = getMasteryTheme(mastery);
+      const visible =
+        matchesFilterMode(mastery, filterMode) ||
+        nodeId === fusionA ||
+        nodeId === fusionB;
+      obj.mesh.userData.filteredOut = !visible;
+
+      const coreMat = obj.coreMesh.material as THREE.MeshPhysicalMaterial;
+      const spriteMat = obj.sprite.material as THREE.SpriteMaterial;
+      const ringMat = obj.ringMesh.material as THREE.MeshBasicMaterial;
+
+      if (visible) {
+        obj.shaderMat.uniforms.uIntensity.value = theme.intensity;
+        coreMat.transparent = false;
+        coreMat.opacity = 1;
+        coreMat.emissiveIntensity = 0.18;
+        spriteMat.opacity = 0.65;
+        ringMat.opacity = 0.7;
+      } else {
+        obj.shaderMat.uniforms.uIntensity.value = 0.12;
+        coreMat.transparent = true;
+        coreMat.opacity = 0.18;
+        coreMat.emissiveIntensity = 0.03;
+        spriteMat.opacity = 0.06;
+        ringMat.opacity = 0.1;
+      }
+    });
+
+    if (hoveredNodeIdRef.current) {
+      const hovObj = nodeObjectsRef.current.get(hoveredNodeIdRef.current);
+      if (hovObj?.mesh.userData.filteredOut) {
+        setHoveredNodeId(null);
+      }
+    }
+  }, [filterMode, nodes, values, fusionA, fusionB]);
+
   // ── Sync Default Graph & Branch Edges ─────────────────────────────────────
   useEffect(() => {
     const linksGroup = linksGroupRef.current;
@@ -1197,66 +1403,12 @@ export function StudyTerrarium({
     }
   }, [forgedSynapses, fusionA, fusionB, targetPositions]);
 
-  // Project Floating Midpoint Pills for Forged Synapses (GENUINE BRIDGES ONLY)
+  // Clear bridge pills immediately when deck or synapses empty
   useEffect(() => {
-    if (!cameraRef.current || !mountRef.current || forgedSynapses.length === 0) {
+    if (nodes.length === 0 || forgedSynapses.length === 0) {
       setBridgePillCoords([]);
-      return;
     }
-
-    const camera = cameraRef.current;
-    const w = mountRef.current.clientWidth;
-    const h = mountRef.current.clientHeight;
-
-    const pills: Array<{
-      key: string;
-      label: string;
-      x: number;
-      y: number;
-      visible: boolean;
-      bridge: ForgedSynapse;
-    }> = [];
-
-    const genuineForged = forgedSynapses.filter(
-      (fs) =>
-        fs.kind === "forged" ||
-        (fs.isCustom && fs.kind !== "branch" && fs.label !== "Sub-concept")
-    );
-
-    genuineForged.forEach((fs) => {
-      const posA = targetPositions.get(fs.sourceId);
-      const posB = targetPositions.get(fs.targetId);
-      if (
-        !posA ||
-        !posB ||
-        isNaN(posA.x) ||
-        isNaN(posA.y) ||
-        isNaN(posB.x) ||
-        isNaN(posB.y)
-      )
-        return;
-
-      const mid = posA.clone().add(posB).multiplyScalar(0.5);
-      const normal = mid.clone().normalize().multiplyScalar(1.8);
-      const ctrl = mid.clone().add(normal);
-
-      const screenV = ctrl.project(camera);
-      const sx = screenV.x * (w / 2) + w / 2;
-      const sy = -(screenV.y * (h / 2)) + h / 2;
-      const isBehind = screenV.z > 1;
-
-      pills.push({
-        key: `${fs.sourceId}-${fs.targetId}`,
-        label: fs.label,
-        x: sx,
-        y: sy,
-        visible: !isBehind && sx > 0 && sx < w && sy > 0 && sy < h,
-        bridge: fs,
-      });
-    });
-
-    setBridgePillCoords(pills);
-  }, [forgedSynapses, targetPositions]);
+  }, [nodes.length, forgedSynapses.length]);
 
   // ── Sync Neural Study GPS 3D Path ───────────────────────────────────────────
   useEffect(() => {
@@ -1364,6 +1516,9 @@ export function StudyTerrarium({
     }
     frameFusedPair(bridge.sourceId, bridge.targetId);
   };
+
+  handleOrbClickRef.current = handleOrbClick;
+  handleOpenSavedBridgeRef.current = handleOpenSavedBridge;
 
   // ── Surprise / Try Another Pair Rotation Generator ──────────────────────────
   const getNextUnpairedConcepts = (): [string, string] | null => {
@@ -1637,6 +1792,12 @@ export function StudyTerrarium({
     ).length;
   }, [forgedSynapses]);
 
+  const filteredCount = useMemo(() => {
+    return nodes.filter((n, i) =>
+      matchesFilterMode(values[i] ?? n.retention ?? 0, filterMode)
+    ).length;
+  }, [nodes, values, filterMode]);
+
   return (
     <div
       style={{
@@ -1648,14 +1809,30 @@ export function StudyTerrarium({
         userSelect: "none",
       }}
     >
+      {/* ── React Bits Particles Layer (Behind 3D Canvas) ────────────────── */}
+      <div className="pointer-events-none absolute inset-0 z-0">
+        <Particles
+          particleColors={["#C6F432", "#ffffff"]}
+          particleCount={140}
+          particleSpread={10}
+          speed={0.08}
+          particleBaseSize={90}
+          alphaParticles={true}
+          moveParticlesOnHover={false}
+          disableRotation={false}
+          className="w-full h-full"
+        />
+      </div>
+
       {/* ── Edge-to-Edge 3D Viewport ──────────────────────────────────────── */}
       <div
         ref={mountRef}
         style={{
           position: "absolute",
           inset: 0,
-          zIndex: 0,
+          zIndex: 10,
           outline: "none",
+          pointerEvents: nodes.length === 0 ? "none" : "auto",
         }}
       />
 
@@ -1665,7 +1842,7 @@ export function StudyTerrarium({
           position: "absolute",
           inset: 0,
           pointerEvents: "none",
-          zIndex: 10,
+          zIndex: 15,
           overflow: "hidden",
         }}
       >
@@ -1883,46 +2060,6 @@ export function StudyTerrarium({
             >
               {forgedCount} forged
             </span>
-
-            {day > 0 && (
-              <div
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  background: "rgba(251, 191, 36, 0.12)",
-                  border: "1px solid rgba(251, 191, 36, 0.35)",
-                  borderRadius: 999,
-                  padding: "1px 8px",
-                  fontSize: 11,
-                  color: "#FBBF24",
-                  fontWeight: 600,
-                }}
-              >
-                <span>Projected +{day}d</span>
-                {onResetDay && (
-                  <button
-                    onClick={onResetDay}
-                    title="Reset time-decay to 0d"
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#FBBF24",
-                      cursor: "pointer",
-                      padding: "0 2px",
-                      fontSize: 10,
-                      fontWeight: 700,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 2,
-                    }}
-                  >
-                    <ResetIcon size={10} />
-                    <span>Reset</span>
-                  </button>
-                )}
-              </div>
-            )}
           </div>
         </div>
 
@@ -1944,6 +2081,7 @@ export function StudyTerrarium({
             return (
               <button
                 key={m}
+                type="button"
                 onClick={() => setFilterMode(m)}
                 style={{
                   padding: "4px 9px",
@@ -1963,7 +2101,165 @@ export function StudyTerrarium({
             );
           })}
         </div>
+
+        {nodes.length > 0 && filteredCount === 0 && filterMode !== "all" && (
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "5px 10px",
+              borderRadius: 999,
+              background: "rgba(20, 20, 23, 0.9)",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              fontSize: 11,
+              color: "#D4D4D8",
+              width: "fit-content",
+            }}
+          >
+            <span>No {filterMode} concepts yet</span>
+            <button
+              type="button"
+              onClick={() => setFilterMode("all")}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#C6F432",
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              Show all
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* ── Empty State Overlay (0 Concepts) ─────────────────────────────── */}
+      {nodes.length === 0 && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            zIndex: 25,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            style={{
+              pointerEvents: "auto",
+              maxWidth: 420,
+              width: "100%",
+              background: "rgba(18, 18, 21, 0.9)",
+              backdropFilter: "blur(24px)",
+              WebkitBackdropFilter: "blur(24px)",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              borderRadius: 20,
+              padding: "28px 26px",
+              textAlign: "center",
+              boxShadow: "0 20px 60px rgba(0, 0, 0, 0.55)",
+            }}
+          >
+            <div
+              style={{
+                width: 46,
+                height: 46,
+                borderRadius: 14,
+                margin: "0 auto 14px",
+                background: "rgba(198, 244, 50, 0.12)",
+                border: "1px solid rgba(198, 244, 50, 0.32)",
+                display: "grid",
+                placeItems: "center",
+                color: "#C6F432",
+              }}
+            >
+              <FileUp size={20} />
+            </div>
+            <h3
+              style={{
+                margin: 0,
+                fontSize: 17,
+                fontWeight: 600,
+                color: "#FAFAFA",
+                letterSpacing: "-0.015em",
+              }}
+            >
+              Your 3D Study Terrarium is ready
+            </h3>
+            <p
+              style={{
+                margin: "8px 0 18px",
+                fontSize: 13,
+                lineHeight: 1.55,
+                color: "#A1A1AA",
+              }}
+            >
+              Upload any lecture PDF or notes to grow interactive 3D concept orbs,
+              forge Synapse bridges, and track calendar retention.
+            </p>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              {onOpenUpload && (
+                <button
+                  type="button"
+                  onClick={onOpenUpload}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 7,
+                    padding: "9px 16px",
+                    borderRadius: 10,
+                    background: "#C6F432",
+                    color: "#0B0B0C",
+                    border: "none",
+                    fontSize: 12.5,
+                    fontWeight: 650,
+                    cursor: "pointer",
+                  }}
+                >
+                  <FileUp size={14} />
+                  <span>Upload PDF</span>
+                </button>
+              )}
+              {onLoadSample && (
+                <button
+                  type="button"
+                  onClick={onLoadSample}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "9px 14px",
+                    borderRadius: 10,
+                    background: "rgba(255, 255, 255, 0.05)",
+                    color: "#D4D4D8",
+                    border: "1px solid rgba(255, 255, 255, 0.12)",
+                    fontSize: 12.5,
+                    fontWeight: 550,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Sparkles size={13} color="#C6F432" />
+                  <span>Try Sample Deck</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Top-Center Guided Prompt (Fusion Mode Active) ─────────────────── */}
       {fuseMode && (
@@ -2330,6 +2626,8 @@ export function StudyTerrarium({
         >
           {/* Search Toggle */}
           <button
+            type="button"
+            disabled={nodes.length === 0}
             onClick={() => setShowSearch((v) => !v)}
             title="Search concepts"
             style={{
@@ -2338,7 +2636,8 @@ export function StudyTerrarium({
               color: showSearch ? "#FAFAFA" : "#A1A1AA",
               borderRadius: 8,
               padding: "6px 9px",
-              cursor: "pointer",
+              cursor: nodes.length === 0 ? "not-allowed" : "pointer",
+              opacity: nodes.length === 0 ? 0.45 : 1,
               display: "flex",
               alignItems: "center",
               gap: 5,
@@ -2358,6 +2657,8 @@ export function StudyTerrarium({
 
           {/* Fuse Concepts Toggle */}
           <button
+            type="button"
+            disabled={nodes.length < 2}
             onClick={() => {
               const next = !fuseMode;
               setFuseMode(next);
@@ -2377,7 +2678,8 @@ export function StudyTerrarium({
               color: fuseMode ? "#C6F432" : "#A1A1AA",
               borderRadius: 999,
               padding: "5px 12px",
-              cursor: "pointer",
+              cursor: nodes.length < 2 ? "not-allowed" : "pointer",
+              opacity: nodes.length < 2 ? 0.45 : 1,
               display: "flex",
               alignItems: "center",
               gap: 6,
@@ -2392,6 +2694,8 @@ export function StudyTerrarium({
 
           {/* Study Path Toggle */}
           <button
+            type="button"
+            disabled={nodes.length === 0}
             onClick={() => {
               const next = !studyPathActive;
               setStudyPathActive(next);
@@ -2411,7 +2715,8 @@ export function StudyTerrarium({
               color: studyPathActive ? "#C6F432" : "#A1A1AA",
               borderRadius: 999,
               padding: "5px 12px",
-              cursor: "pointer",
+              cursor: nodes.length === 0 ? "not-allowed" : "pointer",
+              opacity: nodes.length === 0 ? 0.45 : 1,
               display: "flex",
               alignItems: "center",
               gap: 6,

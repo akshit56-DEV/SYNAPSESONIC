@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, X } from "lucide-react";
 
 interface WorkspaceTourProps {
@@ -35,7 +35,7 @@ const TOUR_STEPS: TourStep[] = [
     selector: '[data-tour="tab-terrarium"]',
     title: "Study Terrarium",
     description:
-      "3D knowledge graph—fuse any two orbs with Synapse Fusion to uncover exam traps, branch deeper, or track Time-Decay.",
+      "3D knowledge graph—fuse any two orbs with Synapse Fusion to uncover exam traps, branch deeper, and monitor calendar retention decay.",
     tab: "terrarium",
   },
   {
@@ -70,6 +70,13 @@ export function WorkspaceTour({
   const [rect, setRect] = useState<TargetRect | null>(null);
   const [viewport, setViewport] = useState({ w: 1280, h: 720 });
 
+  const onHighlightTabRef = useRef(onHighlightTab);
+  onHighlightTabRef.current = onHighlightTab;
+  const onFinishRef = useRef(onFinish);
+  onFinishRef.current = onFinish;
+  const onSkipRef = useRef(onSkip);
+  onSkipRef.current = onSkip;
+
   const currentStep = TOUR_STEPS[stepIdx] || TOUR_STEPS[0];
 
   const measureTarget = useCallback(() => {
@@ -100,14 +107,20 @@ export function WorkspaceTour({
     }
   }, [active]);
 
-  // Notify parent when highlighting a tab & measure target
+  // Highlight tab cleanly once when step transitions
   useEffect(() => {
     if (!active) return;
-    if (currentStep.tab && onHighlightTab) {
-      onHighlightTab(currentStep.tab);
+    const step = TOUR_STEPS[stepIdx];
+    if (step?.tab) {
+      onHighlightTabRef.current?.(step.tab);
     }
+  }, [active, stepIdx]);
+
+  // Measure target rect reliably
+  useEffect(() => {
+    if (!active) return;
     const id = window.requestAnimationFrame(measureTarget);
-    const timer = window.setTimeout(measureTarget, 80);
+    const timer = window.setTimeout(measureTarget, 90);
 
     window.addEventListener("resize", measureTarget);
     window.addEventListener("scroll", measureTarget, true);
@@ -117,7 +130,7 @@ export function WorkspaceTour({
       window.removeEventListener("resize", measureTarget);
       window.removeEventListener("scroll", measureTarget, true);
     };
-  }, [active, stepIdx, currentStep.tab, onHighlightTab, measureTarget]);
+  }, [active, stepIdx, measureTarget]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -125,13 +138,13 @@ export function WorkspaceTour({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onSkip();
+        onSkipRef.current();
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         if (stepIdx < TOUR_STEPS.length - 1) {
           setStepIdx((i) => i + 1);
         } else {
-          onFinish();
+          onFinishRef.current();
         }
       } else if (e.key === "ArrowLeft") {
         e.preventDefault();
@@ -140,7 +153,7 @@ export function WorkspaceTour({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, stepIdx, onFinish, onSkip]);
+  }, [active, stepIdx]);
 
   if (!active) return null;
 

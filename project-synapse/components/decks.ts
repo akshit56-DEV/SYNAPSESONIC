@@ -4,6 +4,8 @@ export type Concept = {
   summary: string;
   retention: number;
   lastReviewed: number | null;
+  lastReviewedAt?: number | null;
+  createdAt?: number | null;
   reviewDay: number;
   needsReview: boolean;
   parentId?: string;
@@ -230,13 +232,16 @@ export function makeDeck(name: string, pairs: string[][]): Deck {
         };
       }
 
+      const now = Date.now();
       return {
         id: `${name}:${i}`,
         title,
         summary,
         retention: [82, 54, 74, 38, 88, 62][i % 6],
         reviewDay: 0,
-        lastReviewed: null,
+        lastReviewed: now,
+        lastReviewedAt: now,
+        createdAt: now,
         needsReview: false,
         quiz,
       };
@@ -244,9 +249,25 @@ export function makeDeck(name: string, pairs: string[][]): Deck {
   };
 }
 
-export function retentionAt(n: Concept, day: number) {
+export function elapsedDaysSince(n: Concept, now = Date.now()): number {
+  const ts =
+    typeof n.lastReviewedAt === "number" && n.lastReviewedAt > 0
+      ? n.lastReviewedAt
+      : typeof n.lastReviewed === "number" && n.lastReviewed > 1_000_000_000
+        ? n.lastReviewed
+        : typeof n.createdAt === "number" && n.createdAt > 0
+          ? n.createdAt
+          : null;
+  if (!ts) return 0;
+  return Math.max(0, (now - ts) / 86_400_000);
+}
+
+export function retentionAt(n: Concept, day = 0, now = Date.now()) {
+  const base = Math.max(0, n.retention ?? 0);
+  const calendarDays = elapsedDaysSince(n, now);
+  const manualOffset = Math.max(0, day - (n.reviewDay ?? 0));
+  const effectiveDays = Math.max(calendarDays, manualOffset);
   return Math.round(
-    n.retention *
-      Math.exp(-Math.max(0, day - n.reviewDay) / (9 + n.retention * 0.32))
+    base * Math.exp(-effectiveDays / (9 + base * 0.32))
   );
 }

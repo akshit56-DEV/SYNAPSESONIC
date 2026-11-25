@@ -7,7 +7,6 @@ import {
   Sprout,
   Hand,
   Upload,
-  Timer,
   Bot,
   ChevronDown,
   Layers3,
@@ -15,12 +14,15 @@ import {
   Trash2,
   Cloud,
   CloudOff,
-  Home,
   LogOut,
   LogIn,
   HelpCircle,
   Compass,
   SlidersHorizontal,
+  FileUp,
+  Sparkles,
+  ArrowRight,
+  BookOpen,
 } from "lucide-react";
 import { useRecall } from "./use-recall";
 import { DeckImport } from "./deck-import";
@@ -32,7 +34,7 @@ import { LatticeLoader } from "./motion/LatticeLoader";
 import { OnboardingStepper } from "./onboarding-stepper";
 import { WorkspaceTour } from "./workspace-tour";
 import { WorkspaceHelpModal } from "./workspace-help-modal";
-import { makeDeck, samples, type Concept } from "./decks";
+import { makeDeck, samples, retentionAt, type Concept } from "./decks";
 import type {
   ForgedSynapse,
   ForgedBridgePayload,
@@ -43,7 +45,6 @@ import {
   upsertUserDeck,
   deleteUserDeck,
   signOut,
-  signInWithGoogle,
   type RemoteDeckRow,
 } from "@/lib/supabase";
 import {
@@ -104,10 +105,29 @@ function writeStoredDecks(
   decks: SavedDeck[]
 ) {
   try {
+    if (decks.length === 0) {
+      window.localStorage.removeItem(key);
+      return;
+    }
     window.localStorage.setItem(key, JSON.stringify({ activeDeckId, decks }));
   } catch {
     // Quiet fallback
   }
+}
+
+function normalizeNodesForCalendar(nodes: Concept[]): Concept[] {
+  const now = Date.now();
+  return nodes.map((n) => {
+    const hasCalendarRef =
+      (typeof n.lastReviewedAt === "number" && n.lastReviewedAt > 0) ||
+      (typeof n.lastReviewed === "number" && n.lastReviewed > 1_000_000_000) ||
+      (typeof n.createdAt === "number" && n.createdAt > 0);
+    if (hasCalendarRef) return n;
+    return {
+      ...n,
+      createdAt: now,
+    };
+  });
 }
 
 function clearGuestStorage() {
@@ -204,10 +224,11 @@ const modes = [
 ];
 
 export default function Workspace() {
-  const [mode, setMode] = useState(0),
+  const [view, setView] = useState<"studio" | "dashboard">("studio"),
+    [mode, setMode] = useState(0),
     [importing, setImporting] = useState(false),
-    [savedDecks, setSavedDecks] = useState<SavedDeck[]>([createStarterDeck()]),
-    [activeDeckId, setActiveDeckId] = useState<string>(STARTER_DECK_ID),
+    [savedDecks, setSavedDecks] = useState<SavedDeck[]>([]),
+    [activeDeckId, setActiveDeckId] = useState<string>(""),
     [deckMenuOpen, setDeckMenuOpen] = useState(false),
     [forgedSynapses, setForgedSynapses] = useState<ForgedSynapse[]>([]),
     [hasHydrated, setHasHydrated] = useState(false),
@@ -260,15 +281,15 @@ export default function Workspace() {
 
   // Active deck computed
   const activeDeck = useMemo(() => {
-    return savedDecks.find((d) => d.id === activeDeckId) || savedDecks[0];
+    return savedDecks.find((d) => d.id === activeDeckId) || savedDecks[0] || null;
   }, [savedDecks, activeDeckId]);
 
-  // Stop synth when leaving Gesture Synth mode
+  // Stop synth when leaving Gesture Synth mode or switching to dashboard
   useEffect(() => {
-    if (mode !== 2) {
+    if (view !== "studio" || mode !== 2) {
       synth.stop();
     }
-  }, [mode, synth]);
+  }, [view, mode, synth]);
 
   const isLearnMode = mode === 0;
   const isStudyMode = mode === 1;
@@ -277,22 +298,23 @@ export default function Workspace() {
   const applyStoredDecks = useCallback(
     (stored: { activeDeckId?: string; decks: SavedDeck[] } | null) => {
       if (stored && stored.decks.length > 0) {
-        setSavedDecks(stored.decks);
+        const normalizedDecks = stored.decks.map((d) => ({
+          ...d,
+          nodes: normalizeNodesForCalendar(d.nodes || []),
+        }));
+        setSavedDecks(normalizedDecks);
         const active =
-          stored.decks.find((d) => d.id === stored.activeDeckId) ||
-          stored.decks[0];
+          normalizedDecks.find((d) => d.id === stored.activeDeckId) ||
+          normalizedDecks[0];
         setActiveDeckId(active.id);
         setForgedSynapses(active.forgedSynapses || []);
         r.load({ name: active.name, nodes: active.nodes });
-        r.setDay(typeof active.day === "number" ? active.day : 0);
         return;
       }
-      const starter = createStarterDeck();
-      setSavedDecks([starter]);
-      setActiveDeckId(STARTER_DECK_ID);
+      setSavedDecks([]);
+      setActiveDeckId("");
       setForgedSynapses([]);
-      r.load({ name: starter.name, nodes: starter.nodes });
-      r.setDay(0);
+      r.load({ name: "My Workspace", nodes: [] });
     },
     [r]
   );
@@ -336,16 +358,16 @@ export default function Workspace() {
         readStoredDecks(GUEST_STORAGE_KEY)?.decks || []
       ).filter((d) => !d.isBuiltIn);
 
-      const baseLocal =
-        userLocal.length > 0
-          ? mergeDecks(userLocal, [])
-          : [createStarterDeck()];
+      const baseLocal = mergeDecks(userLocal, []);
       const combinedLocal =
         guestOnlyCustom.length > 0
           ? [...baseLocal, ...guestOnlyCustom.filter((gd) => !baseLocal.some((bd) => bd.id === gd.id))]
           : baseLocal;
 
-      const merged = mergeDecks(combinedLocal, remoteRows);
+      const merged = mergeDecks(combinedLocal, remoteRows).map((d) => ({
+        ...d,
+        nodes: normalizeNodesForCalendar(d.nodes || []),
+      }));
       const storedActiveId = readStoredDecks(userKey)?.activeDeckId;
       const targetActive =
         merged.find((d) => d.id === storedActiveId) ||
@@ -357,10 +379,13 @@ export default function Workspace() {
         setActiveDeckId(targetActive.id);
         setForgedSynapses(targetActive.forgedSynapses || []);
         r.load({ name: targetActive.name, nodes: targetActive.nodes });
-        r.setDay(typeof targetActive.day === "number" ? targetActive.day : 0);
+      } else {
+        setActiveDeckId("");
+        setForgedSynapses([]);
+        r.load({ name: "My Workspace", nodes: [] });
       }
 
-      writeStoredDecks(userKey, targetActive?.id || STARTER_DECK_ID, merged);
+      writeStoredDecks(userKey, targetActive?.id || "", merged);
       if (guestOnlyCustom.length > 0) {
         clearGuestStorage();
       }
@@ -543,33 +568,54 @@ export default function Workspace() {
     (deck: SavedDeck) => {
       setActiveDeckId(deck.id);
       setForgedSynapses(deck.forgedSynapses || []);
-      r.load({ name: deck.name, nodes: deck.nodes });
-      r.setDay(deck.day || 0);
+      r.load({ name: deck.name, nodes: normalizeNodesForCalendar(deck.nodes || []) });
       setDeckMenuOpen(false);
     },
     [r]
   );
 
-  // ── Delete Custom Deck ─────────────────────────────────────────────────────
+  // ── Load Optional Sample Deck (Manual Secondary Action Only) ───────────────
+  const handleLoadSampleDeck = useCallback(() => {
+    const sample = createStarterDeck();
+    setSavedDecks((prev) => {
+      const existing = prev.find((d) => d.id === sample.id);
+      const next = existing ? prev : [...prev, sample];
+      writeStoredDecks(getStorageKey(userRef.current?.id), sample.id, next);
+      return next;
+    });
+    setActiveDeckId(sample.id);
+    setForgedSynapses([]);
+    r.load({ name: sample.name, nodes: sample.nodes });
+    setView("studio");
+    showToast("Sample deck loaded");
+  }, [r, showToast]);
+
+  // ── Delete Deck ────────────────────────────────────────────────────────────
   const handleDeleteDeck = useCallback(
     (e: React.MouseEvent, deckId: string) => {
       e.stopPropagation();
       setSavedDecks((prev) => {
         const filtered = prev.filter((d) => d.id !== deckId);
-        if (filtered.length === 0) {
-          const starter = createStarterDeck();
-          filtered.push(starter);
-        }
+        const nextActiveId =
+          activeDeckId === deckId ? filtered[0]?.id || "" : activeDeckId;
         if (activeDeckId === deckId) {
           const nextActive = filtered[0];
-          setActiveDeckId(nextActive.id);
-          setForgedSynapses(nextActive.forgedSynapses || []);
-          r.load({ name: nextActive.name, nodes: nextActive.nodes });
-          r.setDay(nextActive.day || 0);
+          if (nextActive) {
+            setActiveDeckId(nextActive.id);
+            setForgedSynapses(nextActive.forgedSynapses || []);
+            r.load({
+              name: nextActive.name,
+              nodes: normalizeNodesForCalendar(nextActive.nodes || []),
+            });
+          } else {
+            setActiveDeckId("");
+            setForgedSynapses([]);
+            r.load({ name: "My Workspace", nodes: [] });
+          }
         }
         writeStoredDecks(
           getStorageKey(userRef.current?.id),
-          activeDeckId === deckId ? filtered[0].id : activeDeckId,
+          nextActiveId,
           filtered
         );
         return filtered;
@@ -585,10 +631,18 @@ export default function Workspace() {
   const handleDeckImportSuccess = useCallback(
     (importedDeck: { name: string; nodes: any[] }) => {
       const newId = `deck_${Date.now()}`;
+      const now = Date.now();
+      const stampedNodes = (importedDeck.nodes || []).map((n: any) => ({
+        ...n,
+        createdAt: n.createdAt ?? now,
+        lastReviewed: n.lastReviewed ?? now,
+        lastReviewedAt: n.lastReviewedAt ?? now,
+        reviewDay: 0,
+      }));
       const newSaved: SavedDeck = {
         id: newId,
         name: importedDeck.name,
-        nodes: importedDeck.nodes,
+        nodes: stampedNodes,
         forgedSynapses: [],
         day: 0,
         isBuiltIn: false,
@@ -600,9 +654,9 @@ export default function Workspace() {
       });
       setActiveDeckId(newId);
       setForgedSynapses([]);
-      r.load(importedDeck);
-      r.setDay(0);
+      r.load({ name: importedDeck.name, nodes: stampedNodes });
       setImporting(false);
+      setView("studio");
     },
     [r]
   );
@@ -611,11 +665,12 @@ export default function Workspace() {
   const handleAddSubconcepts = useCallback(
     (parentId: string, newConcepts: any[]) => {
       const currentDeck = r.deck;
+      const now = Date.now();
       const existingIds = new Set(currentDeck.nodes.map((n) => n.id));
       const addedNodes = newConcepts.map((nc, idx) => {
-        let id = nc.id || `${currentDeck.name}:sub:${Date.now()}:${idx}`;
+        let id = nc.id || `${currentDeck.name}:sub:${now}:${idx}`;
         if (existingIds.has(id)) {
-          id = `${id}-${Date.now()}-${idx}`;
+          id = `${id}-${now}-${idx}`;
         }
         existingIds.add(id);
         return {
@@ -625,6 +680,8 @@ export default function Workspace() {
           retention: 0,
           reviewDay: 0,
           lastReviewed: null,
+          lastReviewedAt: null,
+          createdAt: now,
           needsReview: false,
           parentId,
           quiz: nc.quiz || {
@@ -706,12 +763,17 @@ export default function Workspace() {
       });
 
       if (boostMastery) {
+        const now = Date.now();
         const currentDeck = r.deck;
         const updatedNodes = currentDeck.nodes.map((n) => {
           if (n.id === sourceId || n.id === targetId) {
             return {
               ...n,
               retention: Math.min(100, (n.retention || 0) + 15),
+              lastReviewed: now,
+              lastReviewedAt: now,
+              createdAt: n.createdAt ?? now,
+              reviewDay: 0,
             };
           }
           return n;
@@ -724,12 +786,17 @@ export default function Workspace() {
 
   const handleUpdateMastery = useCallback(
     (nodeId: string, newMastery: number) => {
+      const now = Date.now();
       const currentDeck = r.deck;
       const updatedNodes = currentDeck.nodes.map((n) => {
         if (n.id === nodeId) {
           return {
             ...n,
             retention: Math.max(0, Math.min(100, newMastery)),
+            lastReviewed: now,
+            lastReviewedAt: now,
+            createdAt: n.createdAt ?? now,
+            reviewDay: 0,
           };
         }
         return n;
@@ -828,19 +895,23 @@ export default function Workspace() {
 
       if (e.key === "1") {
         synth.stop();
+        setView("studio");
         setMode(0);
       } else if (e.key === "2") {
         synth.stop();
+        setView("studio");
         setMode(1);
       } else if (e.key === "3") {
-        void synth.start();
+        setView("studio");
+        if (deduplicatedNodes.length > 0) void synth.start();
+        else synth.stop();
         setMode(2);
       }
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [hasHydrated, onboardingOpen, importing, tourActive, helpOpen, synth]);
+  }, [hasHydrated, onboardingOpen, importing, tourActive, helpOpen, synth, deduplicatedNodes.length]);
 
   const handleOnboardingComplete = useCallback(
     (profile: UserStudyProfile, startTour: boolean) => {
@@ -848,6 +919,7 @@ export default function Workspace() {
       setStudyProfile(profile);
       void syncProfileToSupabase(profile);
       setOnboardingOpen(false);
+      setView("studio");
 
       if (startTour) {
         if (
@@ -855,34 +927,39 @@ export default function Workspace() {
           profile.preferredStart === "upload"
         ) {
           pendingStartAfterTourRef.current = profile.preferredStart;
-        } else if (profile.preferredStart === "micu") {
           synth.stop();
           setMode(0);
-        } else {
+        } else if (profile.preferredStart === "terrarium") {
           synth.stop();
           setMode(1);
+        } else {
+          synth.stop();
+          setMode(0);
         }
         showToast(`Workspace calibrated for ${profile.name}`);
         setTourActive(true);
         return;
       }
 
-      if (profile.preferredStart === "micu") {
-        synth.stop();
-        setMode(0);
-      } else if (profile.preferredStart === "terrarium") {
+      if (profile.preferredStart === "terrarium") {
         synth.stop();
         setMode(1);
       } else if (profile.preferredStart === "ar") {
-        void synth.start();
+        if (deduplicatedNodes.length > 0) void synth.start();
+        else synth.stop();
         setMode(2);
       } else if (profile.preferredStart === "upload") {
+        synth.stop();
+        setMode(0);
         setImporting(true);
+      } else {
+        synth.stop();
+        setMode(0);
       }
 
       showToast(`Workspace calibrated for ${profile.name}`);
     },
-    [synth, showToast]
+    [synth, showToast, deduplicatedNodes.length]
   );
 
   const handleOnboardingSkip = useCallback(() => {
@@ -906,13 +983,17 @@ export default function Workspace() {
 
   const handleHighlightTabDuringTour = useCallback(
     (tab: "micu" | "terrarium" | "ar") => {
-      // Never activate webcam during tour — only switch non-camera tabs or highlight tab button
+      // Never activate webcam during tour & always advance cleanly off Tab 2 on step 4
+      setView("studio");
       if (tab === "micu") {
         synth.stop();
         setMode(0);
       } else if (tab === "terrarium") {
         synth.stop();
         setMode(1);
+      } else if (tab === "ar") {
+        synth.stop();
+        setMode(0);
       }
     },
     [synth]
@@ -930,12 +1011,19 @@ export default function Workspace() {
     const pending = pendingStartAfterTourRef.current;
     pendingStartAfterTourRef.current = null;
     if (pending === "ar") {
-      void synth.start();
+      setView("studio");
+      if (deduplicatedNodes.length > 0) void synth.start();
+      else synth.stop();
       setMode(2);
     } else if (pending === "upload") {
+      setView("studio");
+      setMode(0);
       setImporting(true);
+    } else {
+      synth.stop();
+      setMode(0);
     }
-  }, [studyProfile, synth]);
+  }, [studyProfile, synth, deduplicatedNodes.length]);
 
   const handleSignOut = useCallback(async () => {
     setAccountMenuOpen(false);
@@ -949,12 +1037,12 @@ export default function Workspace() {
 
     // Clear guest storage and reset React deck state immediately so private decks never leak across accounts
     clearGuestStorage();
-    const starter = createStarterDeck();
-    setSavedDecks([starter]);
-    setActiveDeckId(STARTER_DECK_ID);
+    setSavedDecks([]);
+    setActiveDeckId("");
     setForgedSynapses([]);
-    r.load({ name: starter.name, nodes: starter.nodes });
-    r.setDay(0);
+    r.load({ name: "My Workspace", nodes: [] });
+    setView("studio");
+    setMode(0);
     setStudyProfile(loadLocalProfile(null));
 
     await signOut();
@@ -987,14 +1075,25 @@ export default function Workspace() {
         style={{ position: "relative", zIndex: 60 }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <Link
-            href="/"
-            className="brand flex items-center"
-            style={{ textDecoration: "none", color: "inherit" }}
-            title="Back to SynapseSonic Home"
+          <button
+            type="button"
+            onClick={() => {
+              synth.stop();
+              setDeckMenuOpen(false);
+              setAccountMenuOpen(false);
+              setView("dashboard");
+            }}
+            className="brand flex items-center cursor-pointer"
+            style={{
+              background: "none",
+              border: "none",
+              padding: 0,
+              color: "inherit",
+            }}
+            title="Workspace Home / Dashboard"
           >
             <BrandLogo size="sm" />
-          </Link>
+          </button>
 
           {/* ── Top-Bar Deck Switcher Dropdown ────────────────────────────── */}
           <div
@@ -1034,7 +1133,7 @@ export default function Workspace() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {activeDeck?.name || r.deck.name}
+                {activeDeck?.name || (savedDecks.length === 0 ? "No decks yet" : r.deck.name)}
               </span>
               <ChevronDown
                 size={12}
@@ -1089,94 +1188,108 @@ export default function Workspace() {
                     scrollbarWidth: "none",
                   }}
                 >
-                  {savedDecks.map((d) => {
-                    const isActive = d.id === activeDeckId;
-                    const count = d.nodes.length;
-                    const avgM = count
-                      ? Math.round(
-                          d.nodes.reduce(
-                            (acc, n) => acc + (n.retention ?? 0),
-                            0
-                          ) / count
-                        )
-                      : 0;
+                  {savedDecks.length === 0 ? (
+                    <div
+                      style={{
+                        padding: "14px 10px",
+                        fontSize: 12,
+                        color: "#71717A",
+                        textAlign: "center",
+                      }}
+                    >
+                      No saved decks yet
+                    </div>
+                  ) : (
+                    savedDecks.map((d) => {
+                      const isActive = d.id === activeDeckId;
+                      const count = d.nodes.length;
+                      const avgM = count
+                        ? Math.round(
+                            d.nodes.reduce(
+                              (acc, n) => acc + retentionAt(n, 0),
+                              0
+                            ) / count
+                          )
+                        : 0;
 
-                    return (
-                      <div
-                        key={d.id}
-                        onClick={() => handleSelectDeck(d)}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          padding: "6px 8px",
-                          borderRadius: 8,
-                          background: isActive
-                            ? "rgba(198, 244, 50, 0.12)"
-                            : "transparent",
-                          cursor: "pointer",
-                          transition: "background 0.15s",
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isActive)
-                            e.currentTarget.style.background =
-                              "rgba(255, 255, 255, 0.05)";
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isActive)
-                            e.currentTarget.style.background = "transparent";
-                        }}
-                      >
+                      return (
                         <div
+                          key={d.id}
+                          onClick={() => {
+                            handleSelectDeck(d);
+                            setView("studio");
+                          }}
                           style={{
                             display: "flex",
-                            flexDirection: "column",
-                            minWidth: 0,
-                            flex: 1,
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "6px 8px",
+                            borderRadius: 8,
+                            background: isActive
+                              ? "rgba(198, 244, 50, 0.12)"
+                              : "transparent",
+                            cursor: "pointer",
+                            transition: "background 0.15s",
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!isActive)
+                              e.currentTarget.style.background =
+                                "rgba(255, 255, 255, 0.05)";
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isActive)
+                              e.currentTarget.style.background = "transparent";
                           }}
                         >
                           <div
                             style={{
                               display: "flex",
-                              alignItems: "center",
-                              gap: 6,
+                              flexDirection: "column",
+                              minWidth: 0,
+                              flex: 1,
                             }}
                           >
-                            {isActive && (
-                              <span
-                                style={{
-                                  width: 6,
-                                  height: 6,
-                                  borderRadius: "50%",
-                                  background: "#C6F432",
-                                }}
-                              />
-                            )}
-                            <span
+                            <div
                               style={{
-                                fontSize: 12,
-                                fontWeight: isActive ? 600 : 500,
-                                color: isActive ? "#FAFAFA" : "#D4D4D8",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
                               }}
                             >
-                              {d.name}
+                              {isActive && (
+                                <span
+                                  style={{
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: "50%",
+                                    background: "#C6F432",
+                                  }}
+                                />
+                              )}
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: isActive ? 600 : 500,
+                                  color: isActive ? "#FAFAFA" : "#D4D4D8",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {d.name}
+                              </span>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: 10.5,
+                                color: "#71717A",
+                                marginLeft: isActive ? 12 : 0,
+                              }}
+                            >
+                              {count} concepts · {avgM}% retention
                             </span>
                           </div>
-                          <span
-                            style={{
-                              fontSize: 10.5,
-                              color: "#71717A",
-                              marginLeft: isActive ? 12 : 0,
-                            }}
-                          >
-                            {count} concepts · {avgM}% retention
-                          </span>
-                        </div>
 
-                        {!d.isBuiltIn && (
                           <button
                             onClick={(e) => handleDeleteDeck(e, d.id)}
                             title="Delete deck"
@@ -1200,10 +1313,10 @@ export default function Workspace() {
                           >
                             <Trash2 size={13} />
                           </button>
-                        )}
-                      </div>
-                    );
-                  })}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
 
                 <div
@@ -1255,13 +1368,12 @@ export default function Workspace() {
             <button
               key={name}
               data-tour={tourId}
-              aria-pressed={mode === i}
+              aria-pressed={view === "studio" && mode === i}
               onClick={() => {
-                if (mode !== i) {
-                  if (i === 2) void synth.start();
-                  else synth.stop();
-                  setMode(i);
-                }
+                setView("studio");
+                if (i === 2 && deduplicatedNodes.length > 0) void synth.start();
+                else synth.stop();
+                setMode(i);
               }}
             >
               <Icon size={16} />
@@ -1269,33 +1381,6 @@ export default function Workspace() {
             </button>
           ))}
         </nav>
-
-        {/* Time-Decay slider - Hidden in Learn with Micu mode */}
-        {!isLearnMode && (
-          <div className="decay">
-            <label
-              htmlFor="decay"
-              className="flex items-center justify-between gap-3"
-            >
-              <span className="flex items-center gap-1.5">
-                <Timer size={13} />
-                Time-Decay
-              </span>
-              <output htmlFor="decay">{r.day}d</output>
-            </label>
-            <input
-              id="decay"
-              type="range"
-              min="0"
-              max="60"
-              value={r.day}
-              style={{
-                background: `linear-gradient(to right,var(--lime) ${(r.day / 60) * 100}%,#37383a 0)`,
-              }}
-              onChange={(e) => r.setDay(+e.target.value)}
-            />
-          </div>
-        )}
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <button className="upload" onClick={() => setImporting(true)}>
@@ -1624,32 +1709,6 @@ export default function Workspace() {
                     <span>Edit Study Profile</span>
                   </button>
 
-                  <Link
-                    href="/"
-                    onClick={() => setAccountMenuOpen(false)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "7px 8px",
-                      borderRadius: 8,
-                      color: "#D4D4D8",
-                      fontSize: 12,
-                      textDecoration: "none",
-                      transition: "background 0.15s",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background =
-                        "rgba(255, 255, 255, 0.06)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "transparent";
-                    }}
-                  >
-                    <Home size={13} />
-                    <span>Landing Page</span>
-                  </Link>
-
                   <div
                     style={{
                       height: 1,
@@ -1688,12 +1747,9 @@ export default function Workspace() {
                       <span>Sign out</span>
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAccountMenuOpen(false);
-                        void signInWithGoogle();
-                      }}
+                    <Link
+                      href="/login"
+                      onClick={() => setAccountMenuOpen(false)}
                       style={{
                         display: "flex",
                         alignItems: "center",
@@ -1705,22 +1761,14 @@ export default function Workspace() {
                         color: "#C6F432",
                         fontSize: 12,
                         fontWeight: 600,
-                        cursor: "pointer",
+                        textDecoration: "none",
                         textAlign: "left",
                         transition: "background 0.15s",
                       }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background =
-                          "rgba(198, 244, 50, 0.18)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background =
-                          "rgba(198, 244, 50, 0.1)";
-                      }}
                     >
                       <LogIn size={13} />
-                      <span>Sign in with Google</span>
-                    </button>
+                      <span>Sign in / Sync Decks</span>
+                    </Link>
                   )}
                 </div>
               )}
@@ -1732,37 +1780,288 @@ export default function Workspace() {
       <div
         className="workbody"
         style={
-          isGestureMode || isLearnMode || isStudyMode
+          view === "dashboard" || isGestureMode || isLearnMode || isStudyMode
             ? { gridTemplateColumns: "1fr", padding: 0 }
             : undefined
         }
       >
-        {/* ── Gesture Synth (mode 2): full-width AR bubble space ─────────── */}
-        {isGestureMode ? (
-          <ARBubbleSpace
-            recall={r}
-            synthMuted={synth.muted}
-            onToggleMute={synth.toggleMute}
-            onForgeSynapse={handleForgeSynapse}
-            onUpdateMastery={handleUpdateMastery}
-            nodes={deduplicatedNodes}
-            activeConceptId={r.nodes[r.q]?.id}
-            deckTitle={r.deck.name}
-          />
+        {view === "dashboard" ? (
+          /* ── Workspace Home / Dashboard View ───────────────────────────── */
+          <div className="h-full w-full overflow-y-auto bg-[#0B0B0C] px-5 sm:px-8 py-8">
+            <div className="max-w-5xl mx-auto flex flex-col gap-8">
+              {/* Hero Welcome Banner */}
+              <div className="rounded-2xl bg-[#141416] border border-white/10 p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                <div>
+                  <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#C6F432]/10 border border-[#C6F432]/25 text-[11px] font-mono uppercase tracking-[0.12em] text-[#C6F432]">
+                    <span>
+                      {studyProfile?.field || "Spatial Study Workspace"}
+                    </span>
+                  </div>
+                  <h1 className="mt-3 text-2xl sm:text-3xl font-semibold tracking-[-0.025em] text-white">
+                    {studyProfile?.name
+                      ? `Welcome back, ${studyProfile.name}`
+                      : user?.user_metadata?.full_name
+                        ? `Welcome back, ${String(user.user_metadata.full_name)}`
+                        : "Your Workspace Home"}
+                  </h1>
+                  <p className="mt-1.5 text-sm text-zinc-400">
+                    {savedDecks.length > 0
+                      ? `${savedDecks.length} ${savedDecks.length === 1 ? "deck" : "decks"} ready · Calendar decay updates memory automatically each day.`
+                      : "Upload any lecture PDF or notes to build your 3D knowledge graph."}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setImporting(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#C6F432] text-[#0B0B0C] text-xs font-semibold hover:bg-[#d4f75c] transition-colors cursor-pointer"
+                  >
+                    <FileUp className="w-4 h-4" />
+                    <span>Upload PDF</span>
+                  </button>
+                  {savedDecks.length === 0 && (
+                    <button
+                      type="button"
+                      onClick={handleLoadSampleDeck}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-zinc-200 text-xs font-medium hover:border-white/30 transition-colors cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-[#C6F432]" />
+                      <span>Try Sample Deck</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Saved Decks & PDFs */}
+              <section className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-white uppercase tracking-[0.08em] flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-[#C6F432]" />
+                    <span>Your Decks &amp; PDFs</span>
+                  </h2>
+                  <span className="text-xs text-zinc-500">
+                    {savedDecks.length} saved
+                  </span>
+                </div>
+
+                {savedDecks.length === 0 ? (
+                  <div className="rounded-2xl bg-[#141416] border border-dashed border-white/15 p-10 text-center flex flex-col items-center">
+                    <div className="w-12 h-12 rounded-xl bg-[#C6F432]/12 border border-[#C6F432]/30 grid place-items-center text-[#C6F432] mb-4">
+                      <FileUp className="w-5 h-5" />
+                    </div>
+                    <h3 className="text-base font-semibold text-white">
+                      No study decks yet
+                    </h3>
+                    <p className="mt-1.5 text-xs sm:text-sm text-zinc-400 max-w-md">
+                      Drop in a lecture PDF to generate concept cards, voice tutor scripts, and a 3D Terrarium automatically.
+                    </p>
+                    <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setImporting(true)}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#C6F432] text-[#0B0B0C] text-xs font-semibold hover:bg-[#d4f75c] transition-colors cursor-pointer"
+                      >
+                        <FileUp className="w-4 h-4" />
+                        <span>Upload PDF</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLoadSampleDeck}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-zinc-200 text-xs font-medium hover:border-white/30 transition-colors cursor-pointer"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-[#C6F432]" />
+                        <span>Try Sample Deck</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {savedDecks.map((d) => {
+                      const count = d.nodes.length;
+                      const avgM = count
+                        ? Math.round(
+                            d.nodes.reduce(
+                              (acc, n) => acc + retentionAt(n, 0),
+                              0
+                            ) / count
+                          )
+                        : 0;
+                      const isCurrent = d.id === activeDeckId;
+                      return (
+                        <div
+                          key={d.id}
+                          onClick={() => {
+                            handleSelectDeck(d);
+                            setView("studio");
+                            setMode(0);
+                          }}
+                          className={`rounded-2xl p-5 border transition-all cursor-pointer flex flex-col justify-between gap-4 ${
+                            isCurrent
+                              ? "bg-[#141416] border-[#C6F432]/50 shadow-[0_0_24px_rgba(198,244,50,0.08)]"
+                              : "bg-[#141416] border-white/10 hover:border-white/25"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="text-sm font-semibold text-white truncate">
+                                {d.name}
+                              </div>
+                              <div className="mt-1 text-xs text-zinc-400">
+                                {count} concepts · {avgM}% retention
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteDeck(e, d.id)}
+                              aria-label={`Delete ${d.name}`}
+                              className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-between text-xs text-[#C6F432] font-medium">
+                            <span>Open in Workspace</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+
+              {/* Quick Mode Launchers */}
+              <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {modes.map(({ name, Icon }, i) => (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => {
+                      setView("studio");
+                      if (i === 2 && deduplicatedNodes.length > 0) void synth.start();
+                      else synth.stop();
+                      setMode(i);
+                    }}
+                    className="rounded-2xl bg-[#141416] border border-white/10 hover:border-[#C6F432]/45 p-5 text-left transition-all cursor-pointer flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-9 h-9 rounded-xl bg-[#C6F432]/12 border border-[#C6F432]/30 grid place-items-center text-[#C6F432]">
+                        <Icon size={17} />
+                      </span>
+                      <div>
+                        <div className="text-sm font-semibold text-white">
+                          {name}
+                        </div>
+                        <div className="text-[11px] text-zinc-400">
+                          {i === 0
+                            ? "Voice AI Tutor"
+                            : i === 1
+                              ? "3D Knowledge Graph"
+                              : "Webcam AR Practice"}
+                        </div>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-zinc-500" />
+                  </button>
+                ))}
+              </section>
+            </div>
+          </div>
+        ) : isGestureMode ? (
+          deduplicatedNodes.length === 0 ? (
+            <div className="h-full w-full bg-[#0B0B0C] flex items-center justify-center p-6">
+              <div className="max-w-md w-full rounded-2xl bg-[#141416] border border-white/10 p-8 text-center">
+                <div className="w-12 h-12 rounded-xl bg-[#C6F432]/12 border border-[#C6F432]/30 grid place-items-center text-[#C6F432] mx-auto mb-4">
+                  <Hand className="w-5 h-5" />
+                </div>
+                <h2 className="text-lg font-semibold text-white">
+                  Upload a PDF to start Gesture Synth
+                </h2>
+                <p className="mt-2 text-xs sm:text-sm text-zinc-400 leading-relaxed">
+                  Gesture Synth turns your concepts into zero-gravity AR recall orbs controlled by your hands.
+                </p>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setImporting(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#C6F432] text-[#0B0B0C] text-xs font-semibold hover:bg-[#d4f75c] transition-colors cursor-pointer"
+                  >
+                    <FileUp className="w-4 h-4" />
+                    <span>Upload PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLoadSampleDeck}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-zinc-200 text-xs font-medium hover:border-white/30 transition-colors cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-[#C6F432]" />
+                    <span>Try Sample Deck</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* ── Gesture Synth (mode 2): full-width AR bubble space ────────── */
+            <ARBubbleSpace
+              recall={r}
+              synthMuted={synth.muted}
+              onToggleMute={synth.toggleMute}
+              onForgeSynapse={handleForgeSynapse}
+              onUpdateMastery={handleUpdateMastery}
+              nodes={deduplicatedNodes}
+              activeConceptId={r.nodes[r.q]?.id}
+              deckTitle={r.deck.name}
+            />
+          )
         ) : isLearnMode ? (
-          /* ── Learn with Micu (mode 0): full-screen spatial tutor ────────── */
-          <MicuTutorSpace
-            recall={r}
-            isUploadOpen={importing}
-            onJumpToAR={() => {
-              void synth.start();
-              setMode(2);
-            }}
-          />
+          deduplicatedNodes.length === 0 ? (
+            <div className="h-full w-full bg-[#0B0B0C] flex items-center justify-center p-6">
+              <div className="max-w-md w-full rounded-2xl bg-[#141416] border border-white/10 p-8 text-center">
+                <div className="w-12 h-12 rounded-xl bg-[#C6F432]/12 border border-[#C6F432]/30 grid place-items-center text-[#C6F432] mx-auto mb-4">
+                  <Bot className="w-5 h-5" />
+                </div>
+                <h2 className="text-lg font-semibold text-white">
+                  Ready to study with Micu
+                </h2>
+                <p className="mt-2 text-xs sm:text-sm text-zinc-400 leading-relaxed">
+                  Upload any lecture PDF or notes to generate concepts, analogies, and voice-guided active recall.
+                </p>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setImporting(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#C6F432] text-[#0B0B0C] text-xs font-semibold hover:bg-[#d4f75c] transition-colors cursor-pointer"
+                  >
+                    <FileUp className="w-4 h-4" />
+                    <span>Upload PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLoadSampleDeck}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-zinc-200 text-xs font-medium hover:border-white/30 transition-colors cursor-pointer"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-[#C6F432]" />
+                    <span>Try Sample Deck</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* ── Learn with Micu (mode 0): full-screen spatial tutor ──────── */
+            <MicuTutorSpace
+              recall={r}
+              isUploadOpen={importing}
+              onJumpToAR={() => {
+                void synth.start();
+                setMode(2);
+              }}
+            />
+          )
         ) : (
           /* ── Study Terrarium (mode 1): 3D Spatial Synthesis Engine ──────── */
           <StudyTerrarium
-            deckTitle={r.deck.name}
+            deckTitle={deduplicatedNodes.length > 0 ? r.deck.name : "Study Terrarium"}
             nodes={deduplicatedNodes}
             values={r.values}
             day={r.day}
@@ -1772,14 +2071,15 @@ export default function Workspace() {
             onUpdateMastery={handleUpdateMastery}
             onAddSubconcepts={handleAddSubconcepts}
             onForgeSynapse={handleForgeSynapse}
-            onResetDay={handleResetDay}
+            onOpenUpload={() => setImporting(true)}
+            onLoadSample={handleLoadSampleDeck}
             onJumpToTutor={(idx) => {
               if (idx !== undefined) r.focusNode(idx);
               setMode(0);
             }}
             onJumpToAR={(idx) => {
               if (idx !== undefined) r.focusNode(idx);
-              void synth.start();
+              if (deduplicatedNodes.length > 0) void synth.start();
               setMode(2);
             }}
           />

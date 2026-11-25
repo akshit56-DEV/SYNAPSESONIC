@@ -54,7 +54,7 @@ export const DEFAULT_USER_PROFILE: UserStudyProfile = {
   field: "CS & AI",
   goal: "Build long-term recall",
   tutorStyle: "Analogy-First",
-  preferredStart: "terrarium",
+  preferredStart: "micu",
   onboardingCompleted: false,
   tourCompleted: false,
 };

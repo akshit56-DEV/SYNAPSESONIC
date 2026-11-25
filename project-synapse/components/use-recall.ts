@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useReducer, useRef } from "react";
-import { makeDeck, samples, retentionAt, type Deck } from "./decks";
-const seed = () => makeDeck("Neural Networks", samples["Neural Networks"]);
-function initial(deck: Deck = seed()) {
+import { retentionAt, type Deck } from "./decks";
+
+const EMPTY_DECK: Deck = { name: "My Workspace", nodes: [] };
+
+function initial(deck: Deck = EMPTY_DECK) {
   return {
     deck,
     q: 0,
@@ -71,9 +73,11 @@ function reduce(s: State, a: Action): State {
               ...n,
               retention: correct
                 ? 100
-                : Math.max(5, retentionAt(n, s.day) - 16),
-              reviewDay: s.day,
-              lastReviewed: a.now ?? null,
+                : Math.max(5, retentionAt(n, s.day, a.now ?? Date.now()) - 16),
+              reviewDay: 0,
+              lastReviewed: a.now ?? Date.now(),
+              lastReviewedAt: a.now ?? Date.now(),
+              createdAt: n.createdAt ?? a.now ?? Date.now(),
               needsReview: !correct,
             },
       ),
@@ -120,7 +124,10 @@ export function useRecall(paused = false) {
     setDay: (value: number) => dispatch({ type: "day", value }),
     close: () => dispatch({ type: "close" }),
     load: (deck: Deck) => dispatch({ type: "load", deck }),
-    next: () => focusNode(values.indexOf(Math.min(...values))),
+    next: () => {
+      if (!values.length) return;
+      focusNode(values.indexOf(Math.min(...values)));
+    },
   };
 }
 export type Recall = ReturnType<typeof useRecall>;
