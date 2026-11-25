@@ -9,8 +9,8 @@ const wasm =
 export type CameraPhase = "off" | "loading" | "live";
 
 export interface ARCameraHandle {
-  videoRef: RefObject<HTMLVideoElement>;
-  overlayRef: RefObject<HTMLCanvasElement>;
+  videoRef: RefObject<HTMLVideoElement | null>;
+  overlayRef: RefObject<HTMLCanvasElement | null>;
   phase: CameraPhase;
   hint: string;
   message: string;
@@ -19,7 +19,7 @@ export interface ARCameraHandle {
   pinch: (x?: number, y?: number) => void;
   answer: (i: number) => void;
   orbit: (dx: number, dy: number) => void;
-  onActive: (v: boolean) => void;
+  onActive?: (v: boolean) => void;
 }
 
 /**
@@ -43,7 +43,7 @@ export function useARCamera(props: GestureActions): ARCameraHandle {
     cleanup.current = () => {};
     setPhase("off");
     setHint("Camera offline");
-    actions.current.onActive(false);
+    (actions.current as any).onActive?.(false);
   }
 
   useEffect(() => {
@@ -122,7 +122,7 @@ export function useARCamera(props: GestureActions): ARCameraHandle {
       layer.height = el.videoHeight;
       const frame = handPointer(layer, () => actions.current, setHint);
       setPhase("live");
-      actions.current.onActive(true);
+      (actions.current as any).onActive?.(true);
       let last = 0,
         prev = -1;
       // Throttle to ~15 FPS to keep the AR overlay responsive.
@@ -165,6 +165,6 @@ export function useARCamera(props: GestureActions): ARCameraHandle {
     pinch: (x, y) => actions.current.pinch(x, y),
     answer: (i) => actions.current.answer(i),
     orbit: (dx, dy) => actions.current.orbit(dx, dy),
-    onActive: (v) => actions.current.onActive(v),
+    onActive: (v) => (actions.current as any).onActive?.(v),
   };
 }

@@ -715,12 +715,11 @@ export function StudyTerrarium({
       });
 
       const hits = raycaster.intersectObjects(clickableMeshes, false);
-      if (hits.length > 0) {
-        setHoveredNodeId(hits[0].object.userData.nodeId);
-        renderer.domElement.style.cursor = "pointer";
-      } else {
-        setHoveredNodeId(null);
-        renderer.domElement.style.cursor = "grab";
+      const nextHoverId = hits.length > 0 ? (hits[0].object.userData.nodeId as string) : null;
+      if (hoveredNodeIdRef.current !== nextHoverId) {
+        hoveredNodeIdRef.current = nextHoverId;
+        setHoveredNodeId(nextHoverId);
+        renderer.domElement.style.cursor = nextHoverId ? "pointer" : "grab";
       }
     };
 
@@ -731,12 +730,16 @@ export function StudyTerrarium({
 
     // 9. Main Animation Loop
     let animId: number;
-    const clock = new THREE.Clock();
+    let lastTime = performance.now();
+    const startTime = lastTime;
+    let lastLabelUpdate = 0;
 
     const animate = () => {
       animId = requestAnimationFrame(animate);
-      const delta = clock.getDelta();
-      const elapsed = clock.getElapsedTime();
+      const now = performance.now();
+      const delta = Math.min(0.1, (now - lastTime) / 1000);
+      lastTime = now;
+      const elapsed = (now - startTime) / 1000;
 
       // Auto-orbit
       if (autoRotateRef.current && !isCameraLerpingRef.current) {
@@ -806,18 +809,22 @@ export function StudyTerrarium({
         const sy = -(screenV.y * halfH) + halfH;
         const isBehind = screenV.z > 1;
 
+        const validCoords = Number.isFinite(sx) && Number.isFinite(sy);
         coords.push({
           id: nodeId,
           title: obj.mesh.userData.title || "",
-          x: sx,
-          y: sy,
+          x: validCoords ? sx : 0,
+          y: validCoords ? sy : 0,
           visible:
-            !isBehind && sx > -40 && sx < width + 40 && sy > -40 && sy < height + 40,
+            !isBehind && validCoords && sx > -40 && sx < width + 40 && sy > -40 && sy < height + 40,
           mastery: obj.mesh.userData.mastery ?? 0,
         });
       });
 
-      setLabelCoords(coords);
+      if (now - lastLabelUpdate > 45) {
+        lastLabelUpdate = now;
+        setLabelCoords(coords);
+      }
 
       // Live Aim-to-Fuse Preview Beam Update
       const pBeam = previewBeamLineRef.current;
@@ -1249,7 +1256,7 @@ export function StudyTerrarium({
     });
 
     setBridgePillCoords(pills);
-  }, [forgedSynapses, targetPositions, labelCoords]);
+  }, [forgedSynapses, targetPositions]);
 
   // ── Sync Neural Study GPS 3D Path ───────────────────────────────────────────
   useEffect(() => {
@@ -1781,11 +1788,11 @@ export function StudyTerrarium({
         })}
 
         {/* Clickable Floating Forged Arc Relationship Badges */}
-        {bridgePillCoords.map((pill) => {
+        {bridgePillCoords.map((pill, pIdx) => {
           if (!pill.visible) return null;
           return (
             <button
-              key={pill.key}
+              key={`${pill.key}-${pIdx}`}
               onClick={(e) => {
                 e.stopPropagation();
                 handleOpenSavedBridge(pill.bridge);

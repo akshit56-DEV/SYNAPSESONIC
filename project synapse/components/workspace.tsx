@@ -253,22 +253,30 @@ export default function Workspace() {
   const handleAddSubconcepts = useCallback(
     (parentId: string, newConcepts: any[]) => {
       const currentDeck = r.deck;
-      const addedNodes = newConcepts.map((nc, idx) => ({
-        id: nc.id || `${currentDeck.name}:sub:${Date.now()}:${idx}`,
-        title: nc.title,
-        summary: nc.summary,
-        retention: 0,
-        reviewDay: 0,
-        lastReviewed: null,
-        needsReview: false,
-        parentId,
-        quiz: nc.quiz || {
-          question: nc.question || `What is the core principle of ${nc.title}?`,
-          options: nc.options || ["Option A", "Option B", "Option C", "Option D"],
-          correctIndex: nc.correctIndex ?? 0,
-          explanation: nc.explanation || `${nc.title}: ${nc.summary}`,
-        },
-      }));
+      const existingIds = new Set(currentDeck.nodes.map((n) => n.id));
+      const addedNodes = newConcepts.map((nc, idx) => {
+        let id = nc.id || `${currentDeck.name}:sub:${Date.now()}:${idx}`;
+        if (existingIds.has(id)) {
+          id = `${id}-${Date.now()}-${idx}`;
+        }
+        existingIds.add(id);
+        return {
+          id,
+          title: nc.title,
+          summary: nc.summary,
+          retention: 0,
+          reviewDay: 0,
+          lastReviewed: null,
+          needsReview: false,
+          parentId,
+          quiz: nc.quiz || {
+            question: nc.question || `What is the core principle of ${nc.title}?`,
+            options: nc.options || ["Option A", "Option B", "Option C", "Option D"],
+            correctIndex: nc.correctIndex ?? 0,
+            explanation: nc.explanation || `${nc.title}: ${nc.summary}`,
+          },
+        };
+      });
 
       const updatedDeck = {
         ...currentDeck,
@@ -277,16 +285,26 @@ export default function Workspace() {
       r.load(updatedDeck);
 
       // Connect parent to newly added subconcepts as kind: 'branch', isCustom: false
-      setForgedSynapses((prev) => [
-        ...prev,
-        ...addedNodes.map((an) => ({
-          sourceId: parentId,
-          targetId: an.id,
-          label: "Sub-concept",
-          kind: "branch" as const,
-          isCustom: false,
-        })),
-      ]);
+      setForgedSynapses((prev) => {
+        const next = [...prev];
+        addedNodes.forEach((an) => {
+          const exists = next.some(
+            (s) =>
+              (s.sourceId === parentId && s.targetId === an.id) ||
+              (s.sourceId === an.id && s.targetId === parentId)
+          );
+          if (!exists) {
+            next.push({
+              sourceId: parentId,
+              targetId: an.id,
+              label: "Sub-concept",
+              kind: "branch" as const,
+              isCustom: false,
+            });
+          }
+        });
+        return next;
+      });
     },
     [r]
   );
@@ -378,6 +396,15 @@ export default function Workspace() {
   const handleResetDay = useCallback(() => {
     r.setDay(0);
   }, [r]);
+
+  const deduplicatedNodes = useMemo(() => {
+    const seen = new Set<string>();
+    return r.nodes.filter((n) => {
+      if (!n || !n.id || seen.has(n.id)) return false;
+      seen.add(n.id);
+      return true;
+    });
+  }, [r.nodes]);
 
   return (
     <main className={`studio ${isGestureMode ? "gesture-mode" : ""}`}>
@@ -713,6 +740,11 @@ export default function Workspace() {
             recall={r}
             synthMuted={synth.muted}
             onToggleMute={synth.toggleMute}
+            onForgeSynapse={handleForgeSynapse}
+            onUpdateMastery={handleUpdateMastery}
+            nodes={deduplicatedNodes}
+            activeConceptId={r.nodes[r.q]?.id}
+            deckTitle={r.deck.name}
           />
         ) : isLearnMode ? (
           /* ── Learn with Micu (mode 0): full-screen spatial tutor ────────── */
@@ -728,7 +760,7 @@ export default function Workspace() {
           /* ── Study Terrarium (mode 1): 3D Spatial Synthesis Engine ──────── */
           <StudyTerrarium
             deckTitle={r.deck.name}
-            nodes={r.nodes}
+            nodes={deduplicatedNodes}
             values={r.values}
             day={r.day}
             activeIndex={r.q}

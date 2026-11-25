@@ -307,10 +307,10 @@ export function mountField(
     // No EffectComposer/post-processing pass is in use, so render directly.
     if (mode === 2) {
       scene.background = null;
-      renderer.setClearColor(0x000000, 0);
+      (renderer as any).setClearColor?.(0x000000, 0);
     } else {
       scene.background = new T.Color(0x0b0b0c);
-      renderer.setClearColor(0x0b0b0c, 1);
+      (renderer as any).setClearColor?.(0x0b0b0c, 1);
     }
     renderer.render(scene, camera);
   }
