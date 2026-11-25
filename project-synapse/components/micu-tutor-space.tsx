@@ -187,6 +187,7 @@ export function MicuTutorSpace({
   const [revealedWordIndex, setRevealedWordIndex] = useState(0);
   const [audioVolume, setAudioVolume] = useState(0);
   const [showHistory, setShowHistory] = useState(false);
+  const [showConceptsDrawer, setShowConceptsDrawer] = useState(false);
   const [historyLog, setHistoryLog] = useState<QALogItem[]>([]);
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [typedQuestion, setTypedQuestion] = useState("");
@@ -682,6 +683,29 @@ export function MicuTutorSpace({
         @media (max-width: 1023px) {
           .mts-root { grid-template-columns: 1fr; }
           .mts-left  { display: none !important; }
+          .mts-right { padding: 12px 14px 16px !important; }
+          .mts-top-bar { justify-content: center; flex-wrap: wrap; gap: 8px; }
+        }
+        @media (max-width: 767px) {
+          .mts-dock-container {
+            max-width: 100%;
+            padding-bottom: max(4px, env(safe-area-inset-bottom));
+          }
+          .mts-dock {
+            overflow-x: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            padding: 6px 8px;
+          }
+          .mts-dock::-webkit-scrollbar { display: none; }
+          .mts-history-drawer {
+            top: 8px;
+            left: 8px;
+            right: 8px;
+            bottom: 8px;
+            width: auto;
+          }
+          .mts-quiz-opts { grid-template-columns: 1fr !important; }
         }
         .mts-left {
           border-right: 1px solid rgba(255, 255, 255, 0.06);
@@ -1157,8 +1181,17 @@ export function MicuTutorSpace({
             }}
           />
 
-          {/* Row 1 — Top-right utility bar */}
+          {/* Row 1 — Top utility bar */}
           <div className="mts-top-bar">
+            <button
+              type="button"
+              className={`mts-ghost-btn lg:hidden${showConceptsDrawer ? " active" : ""}`}
+              onClick={() => setShowConceptsDrawer(true)}
+              aria-label="Open concepts list"
+            >
+              Concepts ({nodes.length})
+            </button>
+
             {/* Native segmented speed toggle */}
             <div
               style={{
@@ -1634,6 +1667,77 @@ export function MicuTutorSpace({
               </button>
             </div>
           </div>
+
+          {/* Mobile Concepts Slide-Over Drawer (< lg) */}
+          {showConceptsDrawer && (
+            <div className="lg:hidden fixed inset-0 z-50 flex">
+              <div
+                className="absolute inset-0 bg-black/65 backdrop-blur-sm"
+                onClick={() => setShowConceptsDrawer(false)}
+              />
+              <aside
+                className="relative z-10 w-[82vw] max-w-[300px] h-full bg-[#0B0B0C] border-r border-white/10 p-4 flex flex-col shadow-2xl"
+                aria-label="Concepts Drawer"
+              >
+                <div className="flex items-center justify-between gap-2 pb-3 border-b border-white/10">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-zinc-100 truncate m-0">
+                      {recall.deck?.name ?? "Deck"}
+                    </p>
+                    <p className="text-xs text-zinc-500 m-0 mt-0.5">
+                      {nodes.length} concepts · {masteredCount} mastered
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowConceptsDrawer(false)}
+                    aria-label="Close concepts drawer"
+                    className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto no-scrollbar flex flex-col gap-1 mt-3 pb-safe">
+                  {nodes.map((node, i) => {
+                    const mastery = getMastery(i);
+                    const isActive = i === activeIndex;
+                    return (
+                      <button
+                        key={node.id}
+                        type="button"
+                        className={`mts-concept-row${isActive ? " active" : ""}`}
+                        onClick={() => {
+                          cancelAllAudio();
+                          recall.focusNode(i);
+                          setShowConceptsDrawer(false);
+                        }}
+                        aria-pressed={isActive}
+                      >
+                        <MasteryRing mastery={mastery} />
+                        <span className="flex-1 min-w-0 text-[13px] leading-snug line-clamp-2 text-left">
+                          {node.title}
+                        </span>
+                        <span
+                          className="text-[11px] tabular-nums shrink-0"
+                          style={{
+                            color:
+                              mastery >= 80
+                                ? "#C6F432"
+                                : mastery > 0
+                                  ? "#A1A1AA"
+                                  : "#71717A",
+                          }}
+                        >
+                          {mastery === 0 ? "New" : `${mastery}%`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </aside>
+            </div>
+          )}
 
           {/* History slide-over drawer */}
           {showHistory && (

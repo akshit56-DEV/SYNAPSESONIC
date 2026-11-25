@@ -2012,18 +2012,9 @@ export function StudyTerrarium({
         })}
       </div>
 
-      {/* ── Top-Left Floating Header with Live Stats & Projected Decay Badge ── */}
+      {/* ── Top-Left Floating Header with Live Stats ─────────────────────── */}
       <div
-        style={{
-          position: "absolute",
-          top: 18,
-          left: 22,
-          zIndex: 20,
-          display: "flex",
-          flexDirection: "column",
-          gap: 9,
-          pointerEvents: "auto",
-        }}
+        className="absolute top-3 left-3 md:top-[18px] md:left-[22px] max-w-[calc(100vw-24px)] z-20 flex flex-col gap-2 pointer-events-auto"
       >
         <div>
           <h2
@@ -2511,18 +2502,7 @@ export function StudyTerrarium({
 
       {/* ── Bottom-Center Floating Dock ───────────────────────────────────── */}
       <div
-        style={{
-          position: "absolute",
-          bottom: 20,
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 20,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 8,
-          pointerEvents: "auto",
-        }}
+        className="absolute bottom-3 md:bottom-5 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 pointer-events-auto max-w-[calc(100vw-20px)] pb-safe md:pb-0"
       >
         {/* Search Popover */}
         {showSearch && (
@@ -2611,16 +2591,12 @@ export function StudyTerrarium({
 
         {/* Compact Dock Pill */}
         <div
+          className="no-scrollbar max-w-full overflow-x-auto flex items-center gap-1 md:gap-1.5 rounded-full px-2 py-1 md:px-2.5 md:py-1.5"
           style={{
             background: "rgba(18, 18, 21, 0.84)",
             backdropFilter: "blur(20px)",
             WebkitBackdropFilter: "blur(20px)",
             border: "1px solid rgba(255, 255, 255, 0.08)",
-            borderRadius: 999,
-            padding: "6px 10px",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
             boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
           }}
         >
@@ -2782,25 +2758,12 @@ export function StudyTerrarium({
       {fusionA && fusionB && (
         <div
           ref={inspectorScrollRef}
+          className="fixed inset-x-0 bottom-0 max-h-[65vh] overflow-y-auto rounded-t-2xl z-30 p-5 pb-safe md:pb-5 md:absolute md:left-auto md:top-[18px] md:right-[22px] md:bottom-[22px] md:w-[340px] md:max-h-[calc(100%-40px)] md:rounded-[18px] flex flex-col gap-3.5 no-scrollbar"
           style={{
-            position: "absolute",
-            top: 18,
-            right: 22,
-            bottom: 22,
-            width: 340,
-            zIndex: 30,
-            maxHeight: "calc(100% - 40px)",
-            overflowY: "auto",
-            scrollbarWidth: "none",
-            background: "rgba(15, 15, 18, 0.9)",
+            background: "rgba(15, 15, 18, 0.94)",
             backdropFilter: "blur(24px)",
             WebkitBackdropFilter: "blur(24px)",
             border: "1px solid rgba(255, 255, 255, 0.08)",
-            borderRadius: 18,
-            padding: 20,
-            display: "flex",
-            flexDirection: "column",
-            gap: 14,
             boxShadow: "0 12px 40px rgba(0, 0, 0, 0.5)",
           }}
         >
@@ -3146,25 +3109,12 @@ export function StudyTerrarium({
       {!fuseMode && selectedConcept && (
         <div
           ref={inspectorScrollRef}
+          className="fixed inset-x-0 bottom-0 max-h-[65vh] overflow-y-auto rounded-t-2xl z-30 p-5 pb-safe md:pb-5 md:absolute md:left-auto md:top-[18px] md:right-[22px] md:bottom-[22px] md:w-[340px] md:max-h-[calc(100%-40px)] md:rounded-[18px] flex flex-col gap-3.5 no-scrollbar"
           style={{
-            position: "absolute",
-            top: 18,
-            right: 22,
-            bottom: 22,
-            width: 340,
-            zIndex: 30,
-            maxHeight: "calc(100% - 40px)",
-            overflowY: "auto",
-            scrollbarWidth: "none",
-            background: "rgba(15, 15, 18, 0.9)",
+            background: "rgba(15, 15, 18, 0.94)",
             backdropFilter: "blur(24px)",
             WebkitBackdropFilter: "blur(24px)",
             border: "1px solid rgba(255, 255, 255, 0.08)",
-            borderRadius: 18,
-            padding: 20,
-            display: "flex",
-            flexDirection: "column",
-            gap: 14,
             boxShadow: "0 12px 40px rgba(0, 0, 0, 0.5)",
           }}
         >

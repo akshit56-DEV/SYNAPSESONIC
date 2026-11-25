@@ -33,6 +33,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
   themeColor: "#0B0B0C",
   colorScheme: "dark",
 };
@@ -47,7 +50,7 @@ export default function RootLayout({
       lang="en"
       className={`dark ${newsreader.variable} ${hankenGrotesk.variable} ${jetbrainsMono.variable}`}
     >
-      <body className="antialiased">
+      <body className="antialiased overflow-x-hidden">
         {children}
         {process.env.NODE_ENV === "production" && <Analytics />}
       </body>

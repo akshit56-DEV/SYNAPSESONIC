@@ -218,9 +218,9 @@ function mergeDecks(
 }
 
 const modes = [
-  { name: "Learn with Micu", Icon: Bot, tourId: "tab-micu" },
-  { name: "Study Terrarium", Icon: Sprout, tourId: "tab-terrarium" },
-  { name: "Gesture Synth", Icon: Hand, tourId: "tab-ar" },
+  { name: "Learn with Micu", shortName: "Micu", Icon: Bot, tourId: "tab-micu" },
+  { name: "Study Terrarium", shortName: "Terrarium", Icon: Sprout, tourId: "tab-terrarium" },
+  { name: "Gesture Synth", shortName: "AR", Icon: Hand, tourId: "tab-ar" },
 ];
 
 export default function Workspace() {
@@ -1074,7 +1074,7 @@ export default function Workspace() {
         className="topbar glass"
         style={{ position: "relative", zIndex: 60 }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <div className="flex items-center gap-2 md:gap-3.5 min-w-0">
           <button
             type="button"
             onClick={() => {
@@ -1083,7 +1083,7 @@ export default function Workspace() {
               setAccountMenuOpen(false);
               setView("dashboard");
             }}
-            className="brand flex items-center cursor-pointer"
+            className="brand workspace-brand flex items-center cursor-pointer shrink-0"
             style={{
               background: "none",
               border: "none",
@@ -1099,23 +1099,15 @@ export default function Workspace() {
           <div
             ref={deckMenuRef}
             data-tour="deck-switcher"
-            style={{ position: "relative" }}
+            className="relative min-w-0"
           >
             <button
               onClick={() => setDeckMenuOpen((v) => !v)}
+              className="inline-flex items-center gap-1.5 md:gap-[7px] px-2.5 py-1.5 md:px-3 md:py-[6px] rounded-lg text-xs font-medium cursor-pointer transition-all"
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 7,
-                padding: "6px 12px",
-                borderRadius: 8,
                 background: "rgba(24, 24, 27, 0.85)",
                 border: "1px solid rgba(255, 255, 255, 0.12)",
                 color: "#FAFAFA",
-                fontSize: 12,
-                fontWeight: 550,
-                cursor: "pointer",
-                transition: "all 0.15s ease",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = "rgba(198, 244, 50, 0.4)";
@@ -1124,15 +1116,8 @@ export default function Workspace() {
                 e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.12)";
               }}
             >
-              <Layers3 size={13} color="#C6F432" />
-              <span
-                style={{
-                  maxWidth: 150,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
+              <Layers3 size={13} color="#C6F432" className="shrink-0" />
+              <span className="max-w-[130px] md:max-w-[150px] truncate whitespace-nowrap">
                 {activeDeck?.name || (savedDecks.length === 0 ? "No decks yet" : r.deck.name)}
               </span>
               <ChevronDown
@@ -1364,11 +1349,12 @@ export default function Workspace() {
         </div>
 
         <nav aria-label="Workspace mode" className="mode-nav">
-          {modes.map(({ name, Icon, tourId }, i) => (
+          {modes.map(({ name, shortName, Icon, tourId }, i) => (
             <button
               key={name}
               data-tour={tourId}
               aria-pressed={view === "studio" && mode === i}
+              className="text-xs px-2 md:text-[13px] md:px-[13px]"
               onClick={() => {
                 setView("studio");
                 if (i === 2 && deduplicatedNodes.length > 0) void synth.start();
@@ -1376,16 +1362,22 @@ export default function Workspace() {
                 setMode(i);
               }}
             >
-              <Icon size={16} />
-              {name}
+              <Icon size={15} className="shrink-0" />
+              <span className="md:hidden">{shortName}</span>
+              <span className="hidden md:inline">{name}</span>
             </button>
           ))}
         </nav>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button className="upload" onClick={() => setImporting(true)}>
+        <div className="flex items-center gap-1.5 md:gap-2.5 shrink-0">
+          <button
+            className="upload !px-2.5 !py-1.5 md:!px-4 md:!py-[10px]"
+            aria-label="Upload PDF"
+            title="Upload PDF"
+            onClick={() => setImporting(true)}
+          >
             <Upload size={15} />
-            Upload PDF
+            <span className="hidden md:inline">Upload PDF</span>
           </button>
 
           {/* ── Quick Help Button (?) ──────────────────────────────────── */}
@@ -1394,18 +1386,11 @@ export default function Workspace() {
             onClick={() => setHelpOpen(true)}
             title="Shortcuts & Gesture Legend (?)"
             aria-label="Shortcuts and Gesture Legend"
+            className="w-[30px] h-[30px] md:w-[34px] md:h-[34px] rounded-full grid place-items-center cursor-pointer transition-all shrink-0"
             style={{
-              width: 34,
-              height: 34,
-              borderRadius: "50%",
               background: "rgba(24, 24, 27, 0.9)",
               border: "1px solid rgba(255, 255, 255, 0.12)",
               color: "#A1A1AA",
-              display: "grid",
-              placeItems: "center",
-              cursor: "pointer",
-              transition: "all 0.15s ease",
-              flexShrink: 0,
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = "rgba(198, 244, 50, 0.45)";

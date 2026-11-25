@@ -2470,58 +2470,602 @@ export function ARBubbleSpace({
         }}
       />
 
-      {/* ── Top-Center Live Gesture Telemetry Pill ──────────────────────────── */}
-      <div
-        style={{
-          position: "absolute",
-          top: 16,
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 32,
-          display: "flex",
-          alignItems: "center",
-          gap: 9,
-          background: "rgba(15, 15, 18, 0.82)",
-          backdropFilter: "blur(18px)",
-          WebkitBackdropFilter: "blur(18px)",
-          border: "1px solid rgba(255, 255, 255, 0.12)",
-          borderRadius: 999,
-          padding: "6px 16px",
-          boxShadow: "0 8px 24px rgba(0, 0, 0, 0.5)",
-          color: "#FAFAFA",
-          fontSize: 12,
-          fontWeight: 600,
-          pointerEvents: "none",
-          userSelect: "none",
-          transition: "all 0.15s ease",
-          maxWidth: "90vw",
-        }}
-      >
-        <span style={{ fontSize: 15, lineHeight: 1 }}>{telemetry.emoji}</span>
-        <span style={{ color: "#E4E4E7", whiteSpace: "nowrap" }}>{telemetry.text}</span>
-        {telemetry.progress > 0 && (
-          <div
-            style={{
-              width: 52,
-              height: 4,
-              borderRadius: 999,
-              background: "rgba(255, 255, 255, 0.12)",
-              overflow: "hidden",
-              flexShrink: 0,
-            }}
-          >
+      {/* ── Responsive AR HUD Overlay (Mobile flex-col; Desktop spatial absolute) ── */}
+      <div className="pointer-events-none absolute inset-0 z-[25] flex flex-col justify-between h-full p-2.5 gap-2 md:block md:p-0">
+        {/* ── Top-Center Live Gesture Telemetry Pill ──────────────────────────── */}
+        <div
+          className="mx-auto md:absolute md:top-4 md:left-1/2 md:-translate-x-1/2 z-[32] flex items-center gap-2 md:gap-[9px] rounded-full px-3 py-1.5 md:px-4 md:py-1.5 shrink-0 max-w-[95vw] md:max-w-[90vw]"
+          style={{
+            background: "rgba(15, 15, 18, 0.82)",
+            backdropFilter: "blur(18px)",
+            WebkitBackdropFilter: "blur(18px)",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.5)",
+            color: "#FAFAFA",
+            fontSize: 12,
+            fontWeight: 600,
+            pointerEvents: "none",
+            userSelect: "none",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <span style={{ fontSize: 15, lineHeight: 1 }}>{telemetry.emoji}</span>
+          <span className="text-zinc-200 truncate">{telemetry.text}</span>
+          {telemetry.progress > 0 && (
             <div
               style={{
-                width: `${Math.min(100, telemetry.progress * 100)}%`,
-                height: "100%",
-                background: telemetry.accentColor || "#C6F432",
+                width: 52,
+                height: 4,
                 borderRadius: 999,
-                boxShadow: `0 0 6px ${telemetry.accentColor || "#C6F432"}`,
-                transition: "width 0.05s linear",
+                background: "rgba(255, 255, 255, 0.12)",
+                overflow: "hidden",
+                flexShrink: 0,
               }}
-            />
+            >
+              <div
+                style={{
+                  width: `${Math.min(100, telemetry.progress * 100)}%`,
+                  height: "100%",
+                  background: telemetry.accentColor || "#C6F432",
+                  borderRadius: 999,
+                  boxShadow: `0 0 6px ${telemetry.accentColor || "#C6F432"}`,
+                  transition: "width 0.05s linear",
+                }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* ── Holographic Quiz Lens & Floating Wing Answer Pods ──────────────── */}
+        {activeQuizNode ? (
+          <div className="pointer-events-auto flex-1 min-h-0 flex flex-col items-center justify-center overflow-y-auto no-scrollbar gap-2 md:block md:overflow-visible md:absolute md:inset-0 md:z-[25]">
+            {/* Central Question Lens */}
+            <div
+              className="w-full max-w-[94vw] md:w-[min(92vw,520px)] md:max-h-[calc(100vh-220px)] overflow-y-auto no-scrollbar md:absolute md:left-1/2 md:bottom-[96px] md:-translate-x-1/2 p-4 md:px-6 md:py-5 rounded-3xl flex flex-col items-center text-center gap-2.5"
+              style={{
+                background: "rgba(12, 12, 16, 0.84)",
+                backdropFilter: "blur(24px)",
+                WebkitBackdropFilter: "blur(24px)",
+                border: "1px solid rgba(255, 255, 255, 0.14)",
+                boxShadow: "0 24px 60px rgba(0, 0, 0, 0.8)",
+              }}
+            >
+              {/* Title & Mastery Header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: getMasteryTheme(activeQuizNode.retention || 0).hex,
+                    boxShadow: `0 0 10px ${getMasteryTheme(activeQuizNode.retention || 0).hex}`,
+                  }}
+                />
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: "#FAFAFA" }}>
+                  {activeQuizNode.title}
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontFamily: "ui-monospace, monospace",
+                    padding: "1px 6px",
+                    borderRadius: 999,
+                    background: "rgba(255, 255, 255, 0.08)",
+                    color: getMasteryTheme(activeQuizNode.retention || 0).hex,
+                  }}
+                >
+                  {activeQuizNode.retention || 0}%
+                </span>
+              </div>
+
+              {/* Question Text */}
+              <div
+                style={{
+                  fontSize: 14.5,
+                  fontWeight: 550,
+                  color: "#F4F4F5",
+                  lineHeight: 1.45,
+                  marginTop: 2,
+                }}
+              >
+                {cleanMathText(
+                  quizCustomQuestion?.question ||
+                    activeQuizNode.quiz?.question ||
+                    "Recall core insight:"
+                )}
+              </div>
+
+              {/* Finger Count Charge Feedback */}
+              {holdingFingerInfo && quizAnsweredIndex === null && (
+                <div
+                  style={{
+                    fontSize: 11.5,
+                    fontWeight: 650,
+                    color: "#C6F432",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <span>
+                    Holding {holdingFingerInfo.count} finger{holdingFingerInfo.count > 1 ? "s" : ""} → Option{" "}
+                    {String.fromCharCode(65 + holdingFingerInfo.count - 1)}
+                  </span>
+                  <span style={{ fontSize: 10, opacity: 0.8 }}>
+                    ({Math.round(holdingFingerInfo.progress * 100)}%)
+                  </span>
+                </div>
+              )}
+
+              {/* Mobile Vertical / 2-Col Stack Answer Options (< md) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-md px-3 md:hidden">
+                {(
+                  quizCustomQuestion?.options ||
+                  activeQuizNode.quiz?.options || [
+                    "Option A",
+                    "Option B",
+                    "Option C",
+                    "Option D",
+                  ]
+                )
+                  .slice(0, 4)
+                  .map((opt, i) => {
+                    const badges = ["A", "B", "C", "D"];
+                    const correctIdx =
+                      quizCustomQuestion?.correctIndex ??
+                      activeQuizNode.quiz?.correctIndex ??
+                      0;
+                    const isChosen = quizAnsweredIndex === i;
+                    const isCorrect = i === correctIdx;
+
+                    let borderColor = "rgba(255, 255, 255, 0.14)";
+                    let bg = "rgba(24, 24, 29, 0.9)";
+
+                    if (quizAnsweredIndex !== null) {
+                      if (isCorrect) {
+                        borderColor = "#C6F432";
+                        bg = "rgba(198, 244, 50, 0.18)";
+                      } else if (isChosen) {
+                        borderColor = "#F87171";
+                        bg = "rgba(248, 113, 113, 0.18)";
+                      }
+                    }
+
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        data-quiz-option={i}
+                        disabled={quizAnsweredIndex !== null}
+                        onClick={() => handleSelectQuizOption(i)}
+                        className="w-full rounded-xl px-3 py-2.5 flex items-center gap-2.5 text-left transition-colors"
+                        style={{
+                          background: bg,
+                          border: `1px solid ${borderColor}`,
+                          cursor: quizAnsweredIndex !== null ? "default" : "pointer",
+                        }}
+                      >
+                        <span
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0"
+                          style={{
+                            background:
+                              isCorrect && quizAnsweredIndex !== null
+                                ? "#C6F432"
+                                : "rgba(255, 255, 255, 0.08)",
+                            color:
+                              isCorrect && quizAnsweredIndex !== null
+                                ? "#0B0B0C"
+                                : "#FAFAFA",
+                          }}
+                        >
+                          {badges[i]}
+                        </span>
+                        <span className="text-xs text-zinc-200 leading-snug flex-1">
+                          {cleanMathText(opt)}
+                        </span>
+                      </button>
+                    );
+                  })}
+              </div>
+
+              {/* Compact Answer Explanation Feedback */}
+              {quizAnsweredIndex !== null && (
+                <div
+                  style={{
+                    width: "100%",
+                    padding: "8px 12px",
+                    borderRadius: 12,
+                    background:
+                      quizAnsweredIndex ===
+                      (quizCustomQuestion?.correctIndex ?? activeQuizNode.quiz?.correctIndex ?? 0)
+                        ? "rgba(198, 244, 50, 0.12)"
+                        : "rgba(248, 113, 113, 0.12)",
+                    border: `1px solid ${
+                      quizAnsweredIndex ===
+                      (quizCustomQuestion?.correctIndex ?? activeQuizNode.quiz?.correctIndex ?? 0)
+                        ? "rgba(198, 244, 50, 0.4)"
+                        : "rgba(248, 113, 113, 0.4)"
+                    }`,
+                    fontSize: 12.5,
+                    color: "#E4E4E7",
+                    lineHeight: 1.38,
+                    textAlign: "left",
+                  }}
+                >
+                  <div style={{ fontWeight: 700, marginBottom: 2 }}>
+                    {quizAnsweredIndex ===
+                    (quizCustomQuestion?.correctIndex ?? activeQuizNode.quiz?.correctIndex ?? 0)
+                      ? "✓ Correct! +18% Mastery Boost"
+                      : "Target Insight:"}
+                  </div>
+                  {cleanMathText(
+                    quizCustomQuestion?.explanation ||
+                      activeQuizNode.quiz?.explanation ||
+                      activeQuizNode.summary
+                  )}
+                </div>
+              )}
+
+              {/* Clean 3-Button Action Bar */}
+              <div className="flex flex-wrap items-center justify-center gap-2 mt-1.5">
+                <button
+                  data-quiz-action="next-orb"
+                  onClick={handleNextOrbInLens}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer relative overflow-hidden"
+                  style={{
+                    background:
+                      thumbsUpProgress > 0 ? "rgba(198, 244, 50, 0.28)" : "rgba(198, 244, 50, 0.16)",
+                    border:
+                      thumbsUpProgress > 0
+                        ? "1px solid #C6F432"
+                        : "1px solid rgba(198, 244, 50, 0.45)",
+                    boxShadow:
+                      thumbsUpProgress > 0 ? "0 0 16px rgba(198, 244, 50, 0.45)" : "none",
+                    color: "#C6F432",
+                  }}
+                >
+                  {thumbsUpProgress > 0 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        bottom: 0,
+                        height: 2,
+                        width: `${thumbsUpProgress * 100}%`,
+                        background: "#C6F432",
+                        transition: "width 0.05s linear",
+                      }}
+                    />
+                  )}
+                  <span>👍 Next</span>
+                  <ArrowRight size={12} />
+                </button>
+
+                <button
+                  data-quiz-action="new-ai"
+                  disabled={quizAiLoading}
+                  onClick={handleFetchNextAiQuestion}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer relative overflow-hidden"
+                  style={{
+                    background:
+                      openPalmProgress > 0 ? "rgba(56, 189, 248, 0.28)" : "rgba(255, 255, 255, 0.08)",
+                    border:
+                      openPalmProgress > 0
+                        ? "1px solid #38BDF8"
+                        : "1px solid rgba(255, 255, 255, 0.15)",
+                    boxShadow:
+                      openPalmProgress > 0 ? "0 0 16px rgba(56, 189, 248, 0.45)" : "none",
+                    color: "#FAFAFA",
+                  }}
+                >
+                  {openPalmProgress > 0 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        bottom: 0,
+                        height: 2,
+                        width: `${openPalmProgress * 100}%`,
+                        background: "#38BDF8",
+                        transition: "width 0.05s linear",
+                      }}
+                    />
+                  )}
+                  <Sparkles size={12} color={openPalmProgress > 0 ? "#38BDF8" : undefined} />
+                  <span>{quizAiLoading ? "Synthesizing…" : "🖐️ New AI Question"}</span>
+                </button>
+
+                <button
+                  data-quiz-action="toss-back"
+                  onClick={() => handleCloseQuiz(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold cursor-pointer relative overflow-hidden"
+                  style={{
+                    background:
+                      fistProgress > 0 ? "rgba(248, 113, 113, 0.25)" : "rgba(255, 255, 255, 0.06)",
+                    border:
+                      fistProgress > 0 ? "1px solid #F87171" : "1px solid rgba(255, 255, 255, 0.12)",
+                    boxShadow:
+                      fistProgress > 0 ? "0 0 16px rgba(248, 113, 113, 0.4)" : "none",
+                    color: "#D4D4D8",
+                  }}
+                >
+                  {fistProgress > 0 && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        bottom: 0,
+                        height: 2,
+                        width: `${fistProgress * 100}%`,
+                        background: "#F87171",
+                        transition: "width 0.05s linear",
+                      }}
+                    />
+                  )}
+                  <X size={12} />
+                  <span>✊ Toss</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Desktop 4 Floating Wing Answer Pods (md+) */}
+            {(
+              quizCustomQuestion?.options ||
+              activeQuizNode.quiz?.options || [
+                "Option A",
+                "Option B",
+                "Option C",
+                "Option D",
+              ]
+            )
+              .slice(0, 4)
+              .map((opt, i) => {
+                const badges = ["☝️ A", "✌️ B", "🤟 C", "🖖 D"];
+                const podPositions = [
+                  { left: "5%", top: "34%" }, // A
+                  { right: "5%", top: "34%" }, // B
+                  { left: "5%", top: "54%" }, // C
+                  { right: "5%", top: "54%" }, // D
+                ];
+                const pos = podPositions[i];
+                const correctIdx =
+                  quizCustomQuestion?.correctIndex ?? activeQuizNode.quiz?.correctIndex ?? 0;
+                const isChosen = quizAnsweredIndex === i;
+                const isCorrect = i === correctIdx;
+
+                const isDwellActive = dwellPodInfo?.index === i && dwellPodInfo.progress > 0;
+                const isFingerActive = holdingFingerInfo && holdingFingerInfo.count - 1 === i;
+                const chargeProg = isDwellActive
+                  ? dwellPodInfo.progress
+                  : isFingerActive
+                    ? holdingFingerInfo.progress
+                    : 0;
+
+                let borderColor = "rgba(255, 255, 255, 0.12)";
+                let bg = "rgba(18, 18, 22, 0.82)";
+
+                if (isDwellActive || isFingerActive) {
+                  borderColor = "#C6F432";
+                  bg = "rgba(198, 244, 50, 0.16)";
+                }
+
+                if (quizAnsweredIndex !== null) {
+                  if (isCorrect) {
+                    borderColor = "#C6F432";
+                    bg = "rgba(198, 244, 50, 0.18)";
+                  } else if (isChosen) {
+                    borderColor = "#F87171";
+                    bg = "rgba(248, 113, 113, 0.18)";
+                  }
+                }
+
+                return (
+                  <button
+                    key={i}
+                    data-quiz-option={i}
+                    disabled={quizAnsweredIndex !== null}
+                    onClick={() => handleSelectQuizOption(i)}
+                    className="hidden md:flex items-center gap-2.5 text-left overflow-hidden transition-all"
+                    style={{
+                      position: "absolute",
+                      ...pos,
+                      width: 230,
+                      padding: "12px 14px",
+                      borderRadius: 16,
+                      background: bg,
+                      backdropFilter: "blur(20px)",
+                      WebkitBackdropFilter: "blur(20px)",
+                      border: `1px solid ${borderColor}`,
+                      boxShadow: "0 12px 32px rgba(0, 0, 0, 0.5)",
+                      cursor: quizAnsweredIndex !== null ? "default" : "pointer",
+                    }}
+                  >
+                    {chargeProg > 0 && quizAnsweredIndex === null && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          bottom: 0,
+                          height: 3,
+                          width: `${chargeProg * 100}%`,
+                          background: "#C6F432",
+                          borderRadius: "0 0 16px 16px",
+                          boxShadow: "0 0 8px #C6F432",
+                          transition: "width 0.05s linear",
+                        }}
+                      />
+                    )}
+
+                    <span
+                      style={{
+                        height: 26,
+                        padding: "0 8px",
+                        borderRadius: 13,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        background:
+                          isCorrect && quizAnsweredIndex !== null
+                            ? "#C6F432"
+                            : "rgba(255, 255, 255, 0.08)",
+                        color:
+                          isCorrect && quizAnsweredIndex !== null ? "#0B0B0C" : "#FAFAFA",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {badges[i]}
+                    </span>
+                    <span style={{ fontSize: 12, color: "#E4E4E7", lineHeight: 1.35, flex: 1 }}>
+                      {cleanMathText(opt)}
+                    </span>
+                  </button>
+                );
+              })}
           </div>
+        ) : (
+          <div className="flex-1 min-h-0 pointer-events-none" />
         )}
+
+        {/* ── Bottom AR Dock (Stacks cleanly with gap-2 in flex-col HUD on mobile) ── */}
+        <div
+          className="pointer-events-auto shrink-0 mx-auto w-full md:w-auto flex flex-col items-center gap-1.5 md:gap-2 pb-safe md:pb-0 md:absolute md:bottom-6 md:left-1/2 md:-translate-x-1/2 z-30"
+        >
+          <div
+            className="flex flex-wrap md:flex-nowrap items-center justify-center gap-1.5 max-w-full rounded-full px-2.5 py-1.5 md:px-3"
+            style={{
+              background: "rgba(18, 18, 21, 0.85)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              border: "1px solid rgba(255, 255, 255, 0.1)",
+              boxShadow: "0 12px 32px rgba(0, 0, 0, 0.55)",
+            }}
+          >
+            {/* Camera Toggle */}
+            <button
+              data-dock-action="camera"
+              disabled={cameraLoading}
+              onClick={() => (cameraActive ? stopCamera() : startCamera())}
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-2 md:py-1.5 rounded-full font-semibold cursor-pointer transition-all"
+              style={{
+                background: cameraActive ? "rgba(198, 244, 50, 0.16)" : "transparent",
+                border: `1px solid ${cameraActive ? "rgba(198, 244, 50, 0.4)" : "transparent"}`,
+                color: cameraActive ? "#C6F432" : "#A1A1AA",
+              }}
+            >
+              {cameraActive ? <Camera size={13} /> : <CameraOff size={13} />}
+              <span>{cameraLoading ? "Starting…" : cameraActive ? "AR Camera Live" : "Enable AR Camera"}</span>
+            </button>
+
+            {/* Gather Orbs Button */}
+            <button
+              data-dock-action="gather"
+              onClick={handleGatherOrbs}
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-2 md:py-1.5 rounded-full font-semibold cursor-pointer"
+              style={{
+                background: "transparent",
+                border: "1px solid transparent",
+                color: "#D4D4D8",
+              }}
+            >
+              <Magnet size={13} color="#C6F432" />
+              <span>Gather Orbs</span>
+            </button>
+
+            {/* Synth Sound Toggle */}
+            <button
+              data-dock-action="mute"
+              onClick={onToggleMute}
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-2 md:py-1.5 rounded-full font-semibold cursor-pointer"
+              style={{
+                background: "transparent",
+                border: "1px solid transparent",
+                color: synthMuted ? "#71717A" : "#D4D4D8",
+              }}
+            >
+              {synthMuted ? <VolumeX size={13} /> : <Volume2 size={13} color="#C6F432" />}
+              <span>{synthMuted ? "Muted" : "Synth Sound"}</span>
+            </button>
+
+            {/* Compact Page Pager when nodes > 8 */}
+            {totalPages > 1 && (
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  paddingLeft: 8,
+                  borderLeft: "1px solid rgba(255, 255, 255, 0.1)",
+                }}
+              >
+                <button
+                  data-dock-action="pager-prev"
+                  disabled={pageIndex === 0}
+                  onClick={() => {
+                    synthRef.current.playTossWhoosh();
+                    setPageIndex((p) => Math.max(0, p - 1));
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: pageIndex === 0 ? "#52525B" : "#FAFAFA",
+                    cursor: pageIndex === 0 ? "default" : "pointer",
+                    display: "grid",
+                    placeItems: "center",
+                    padding: 2,
+                  }}
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontFamily: "ui-monospace, monospace",
+                    color: "#A1A1AA",
+                    padding: "0 2px",
+                  }}
+                >
+                  {pageIndex + 1}/{totalPages}
+                </span>
+                <button
+                  data-dock-action="pager-next"
+                  disabled={pageIndex === totalPages - 1}
+                  onClick={() => {
+                    synthRef.current.playTossWhoosh();
+                    setPageIndex((p) => Math.min(totalPages - 1, p + 1));
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: pageIndex === totalPages - 1 ? "#52525B" : "#FAFAFA",
+                    cursor: pageIndex === totalPages - 1 ? "default" : "pointer",
+                    display: "grid",
+                    placeItems: "center",
+                    padding: 2,
+                  }}
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Dynamic Contextual Status Hint */}
+          <div
+            className="hidden sm:block text-center"
+            style={{
+              fontSize: 10.5,
+              color: "#8E8E93",
+              letterSpacing: 0.2,
+              fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+            }}
+          >
+            {activeQuizNode
+              ? "☝️✌️🤟🖖 Hold 1–4 fingers to answer · 🖐️ Palm safe · ✊ Fist tosses back · 👍 Thumbs up advances"
+              : "Pinch to grab & toss · Closer/farther for depth · Pull close or tap to quiz · Fist to summon"}
+          </div>
+        </div>
       </div>
 
       {/* ── Floating 2D HTML Titles Over 3D Orbs (Hidden in Quiz Focus Theater) ───── */}
@@ -2590,576 +3134,6 @@ export function ARBubbleSpace({
           })}
         </div>
       )}
-
-      {/* ── Holographic Quiz Lens & Floating Wing Answer Pods ──────────────── */}
-      {activeQuizNode && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            zIndex: 25,
-            pointerEvents: "auto",
-          }}
-        >
-          {/* Central Question Lens (Under the 3D Orb, with strict bottom safe-margin) */}
-          <div
-            style={{
-              position: "absolute",
-              left: "50%",
-              bottom: 96,
-              transform: "translateX(-50%)",
-              width: "min(92vw, 520px)",
-              maxHeight: "calc(100vh - 220px)",
-              overflowY: "auto",
-              padding: "20px 24px",
-              borderRadius: 24,
-              background: "rgba(12, 12, 16, 0.78)",
-              backdropFilter: "blur(24px)",
-              WebkitBackdropFilter: "blur(24px)",
-              border: "1px solid rgba(255, 255, 255, 0.14)",
-              boxShadow: "0 24px 60px rgba(0, 0, 0, 0.8)",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              textAlign: "center",
-              gap: 10,
-              scrollbarWidth: "none",
-            }}
-          >
-            {/* Title & Mastery Header */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: getMasteryTheme(activeQuizNode.retention || 0).hex,
-                  boxShadow: `0 0 10px ${getMasteryTheme(activeQuizNode.retention || 0).hex}`,
-                }}
-              />
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: "#FAFAFA" }}>
-                {activeQuizNode.title}
-              </span>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontFamily: "ui-monospace, monospace",
-                  padding: "1px 6px",
-                  borderRadius: 999,
-                  background: "rgba(255, 255, 255, 0.08)",
-                  color: getMasteryTheme(activeQuizNode.retention || 0).hex,
-                }}
-              >
-                {activeQuizNode.retention || 0}%
-              </span>
-            </div>
-
-            {/* Question Text */}
-            <div
-              style={{
-                fontSize: 14.5,
-                fontWeight: 550,
-                color: "#F4F4F5",
-                lineHeight: 1.45,
-                marginTop: 2,
-              }}
-            >
-              {cleanMathText(
-                quizCustomQuestion?.question ||
-                  activeQuizNode.quiz?.question ||
-                  "Recall core insight:"
-              )}
-            </div>
-
-            {/* Finger Count Charge Feedback */}
-            {holdingFingerInfo && quizAnsweredIndex === null && (
-              <div
-                style={{
-                  fontSize: 11.5,
-                  fontWeight: 650,
-                  color: "#C6F432",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-              >
-                <span>
-                  Holding {holdingFingerInfo.count} finger{holdingFingerInfo.count > 1 ? "s" : ""} → Option{" "}
-                  {String.fromCharCode(65 + holdingFingerInfo.count - 1)}
-                </span>
-                <span style={{ fontSize: 10, opacity: 0.8 }}>
-                  ({Math.round(holdingFingerInfo.progress * 100)}%)
-                </span>
-              </div>
-            )}
-
-            {/* Compact Answer Explanation Feedback */}
-            {quizAnsweredIndex !== null && (
-              <div
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  borderRadius: 12,
-                  background:
-                    quizAnsweredIndex ===
-                    (quizCustomQuestion?.correctIndex ?? activeQuizNode.quiz?.correctIndex ?? 0)
-                      ? "rgba(198, 244, 50, 0.12)"
-                      : "rgba(248, 113, 113, 0.12)",
-                  border: `1px solid ${
-                    quizAnsweredIndex ===
-                    (quizCustomQuestion?.correctIndex ?? activeQuizNode.quiz?.correctIndex ?? 0)
-                      ? "rgba(198, 244, 50, 0.4)"
-                      : "rgba(248, 113, 113, 0.4)"
-                  }`,
-                  fontSize: 12.5,
-                  color: "#E4E4E7",
-                  lineHeight: 1.38,
-                  textAlign: "left",
-                }}
-              >
-                <div style={{ fontWeight: 700, marginBottom: 2 }}>
-                  {quizAnsweredIndex ===
-                  (quizCustomQuestion?.correctIndex ?? activeQuizNode.quiz?.correctIndex ?? 0)
-                    ? "✓ Correct! +18% Mastery Boost"
-                    : "Target Insight:"}
-                </div>
-                {cleanMathText(
-                  quizCustomQuestion?.explanation ||
-                    activeQuizNode.quiz?.explanation ||
-                    activeQuizNode.summary
-                )}
-              </div>
-            )}
-
-            {/* Clean 3-Button Action Bar with Hand Emojis & Interactive Hold Progress */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-              <button
-                data-quiz-action="next-orb"
-                onClick={handleNextOrbInLens}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  padding: "6px 13px",
-                  borderRadius: 999,
-                  background:
-                    thumbsUpProgress > 0 ? "rgba(198, 244, 50, 0.28)" : "rgba(198, 244, 50, 0.16)",
-                  border:
-                    thumbsUpProgress > 0
-                      ? "1px solid #C6F432"
-                      : "1px solid rgba(198, 244, 50, 0.45)",
-                  boxShadow:
-                    thumbsUpProgress > 0 ? "0 0 16px rgba(198, 244, 50, 0.45)" : "none",
-                  color: "#C6F432",
-                  fontSize: 11.5,
-                  fontWeight: 650,
-                  cursor: "pointer",
-                  transition: "all 0.15s ease",
-                  position: "relative",
-                  overflow: "hidden",
-                }}
-              >
-                {thumbsUpProgress > 0 && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: 0,
-                      bottom: 0,
-                      height: 2,
-                      width: `${thumbsUpProgress * 100}%`,
-                      background: "#C6F432",
-                      transition: "width 0.05s linear",
-                    }}
-                  />
-                )}
-                <span>👍 Next Orb</span>
-                <ArrowRight size={12} />
-              </button>
-
-              <button
-                data-quiz-action="new-ai"
-                disabled={quizAiLoading}
-                onClick={handleFetchNextAiQuestion}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  padding: "6px 13px",
-                  borderRadius: 999,
-                  background:
-                    openPalmProgress > 0 ? "rgba(56, 189, 248, 0.28)" : "rgba(255, 255, 255, 0.08)",
-                  border:
-                    openPalmProgress > 0
-                      ? "1px solid #38BDF8"
-                      : "1px solid rgba(255, 255, 255, 0.15)",
-                  boxShadow:
-                    openPalmProgress > 0 ? "0 0 16px rgba(56, 189, 248, 0.45)" : "none",
-                  color: "#FAFAFA",
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  transition: "all 0.15s ease",
-                  position: "relative",
-                  overflow: "hidden",
-                }}
-              >
-                {openPalmProgress > 0 && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: 0,
-                      bottom: 0,
-                      height: 2,
-                      width: `${openPalmProgress * 100}%`,
-                      background: "#38BDF8",
-                      transition: "width 0.05s linear",
-                    }}
-                  />
-                )}
-                <Sparkles size={12} color={openPalmProgress > 0 ? "#38BDF8" : undefined} />
-                <span>{quizAiLoading ? "Synthesizing…" : "🖐️ New AI Question"}</span>
-              </button>
-
-              <button
-                data-quiz-action="toss-back"
-                onClick={() => handleCloseQuiz(true)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 5,
-                  padding: "6px 13px",
-                  borderRadius: 999,
-                  background:
-                    fistProgress > 0 ? "rgba(248, 113, 113, 0.25)" : "rgba(255, 255, 255, 0.06)",
-                  border:
-                    fistProgress > 0 ? "1px solid #F87171" : "1px solid rgba(255, 255, 255, 0.12)",
-                  boxShadow:
-                    fistProgress > 0 ? "0 0 16px rgba(248, 113, 113, 0.4)" : "none",
-                  color: "#D4D4D8",
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  transition: "all 0.15s ease",
-                  position: "relative",
-                  overflow: "hidden",
-                }}
-              >
-                {fistProgress > 0 && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: 0,
-                      bottom: 0,
-                      height: 2,
-                      width: `${fistProgress * 100}%`,
-                      background: "#F87171",
-                      transition: "width 0.05s linear",
-                    }}
-                  />
-                )}
-                <X size={12} />
-                <span>✊ Toss Back</span>
-              </button>
-            </div>
-          </div>
-
-          {/* 4 Floating Wing Answer Pods with Hand Emoji Badges */}
-          {(
-            quizCustomQuestion?.options ||
-            activeQuizNode.quiz?.options || [
-              "Option A",
-              "Option B",
-              "Option C",
-              "Option D",
-            ]
-          )
-            .slice(0, 4)
-            .map((opt, i) => {
-              const badges = ["☝️ A", "✌️ B", "🤟 C", "🖖 D"];
-              const podPositions = [
-                { left: "5%", top: "34%" }, // A
-                { right: "5%", top: "34%" }, // B
-                { left: "5%", top: "54%" }, // C
-                { right: "5%", top: "54%" }, // D
-              ];
-              const pos = podPositions[i];
-              const correctIdx =
-                quizCustomQuestion?.correctIndex ?? activeQuizNode.quiz?.correctIndex ?? 0;
-              const isChosen = quizAnsweredIndex === i;
-              const isCorrect = i === correctIdx;
-
-              const isDwellActive = dwellPodInfo?.index === i && dwellPodInfo.progress > 0;
-              const isFingerActive = holdingFingerInfo && holdingFingerInfo.count - 1 === i;
-              const chargeProg = isDwellActive
-                ? dwellPodInfo.progress
-                : isFingerActive
-                ? holdingFingerInfo.progress
-                : 0;
-
-              let borderColor = "rgba(255, 255, 255, 0.12)";
-              let bg = "rgba(18, 18, 22, 0.82)";
-
-              if (isDwellActive || isFingerActive) {
-                borderColor = "#C6F432";
-                bg = "rgba(198, 244, 50, 0.16)";
-              }
-
-              if (quizAnsweredIndex !== null) {
-                if (isCorrect) {
-                  borderColor = "#C6F432";
-                  bg = "rgba(198, 244, 50, 0.18)";
-                } else if (isChosen) {
-                  borderColor = "#F87171";
-                  bg = "rgba(248, 113, 113, 0.18)";
-                }
-              }
-
-              return (
-                <button
-                  key={i}
-                  data-quiz-option={i}
-                  disabled={quizAnsweredIndex !== null}
-                  onClick={() => handleSelectQuizOption(i)}
-                  style={{
-                    position: "absolute",
-                    ...pos,
-                    width: 230,
-                    padding: "12px 14px",
-                    borderRadius: 16,
-                    background: bg,
-                    backdropFilter: "blur(20px)",
-                    WebkitBackdropFilter: "blur(20px)",
-                    border: `1px solid ${borderColor}`,
-                    boxShadow: "0 12px 32px rgba(0, 0, 0, 0.5)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    textAlign: "left",
-                    cursor: quizAnsweredIndex !== null ? "default" : "pointer",
-                    transition: "all 0.18s ease",
-                    overflow: "hidden",
-                  }}
-                >
-                  {chargeProg > 0 && quizAnsweredIndex === null && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: 0,
-                        bottom: 0,
-                        height: 3,
-                        width: `${chargeProg * 100}%`,
-                        background: "#C6F432",
-                        borderRadius: "0 0 16px 16px",
-                        boxShadow: "0 0 8px #C6F432",
-                        transition: "width 0.05s linear",
-                      }}
-                    />
-                  )}
-
-                  <span
-                    style={{
-                      height: 26,
-                      padding: "0 8px",
-                      borderRadius: 13,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      background:
-                        isCorrect && quizAnsweredIndex !== null
-                          ? "#C6F432"
-                          : "rgba(255, 255, 255, 0.08)",
-                      color:
-                        isCorrect && quizAnsweredIndex !== null ? "#0B0B0C" : "#FAFAFA",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {badges[i]}
-                  </span>
-                  <span style={{ fontSize: 12, color: "#E4E4E7", lineHeight: 1.35, flex: 1 }}>
-                    {cleanMathText(opt)}
-                  </span>
-                </button>
-              );
-            })}
-        </div>
-      )}
-
-      {/* ── Minimal Floating Bottom Dock (z-index: 30) ──────────────────────── */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: 24,
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 30,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: 8,
-          pointerEvents: "auto",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            background: "rgba(18, 18, 21, 0.85)",
-            backdropFilter: "blur(20px)",
-            WebkitBackdropFilter: "blur(20px)",
-            border: "1px solid rgba(255, 255, 255, 0.1)",
-            borderRadius: 999,
-            padding: "5px 12px",
-            boxShadow: "0 12px 32px rgba(0, 0, 0, 0.55)",
-          }}
-        >
-          {/* Camera Toggle */}
-          <button
-            data-dock-action="camera"
-            disabled={cameraLoading}
-            onClick={() => (cameraActive ? stopCamera() : startCamera())}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "6px 12px",
-              borderRadius: 999,
-              background: cameraActive ? "rgba(198, 244, 50, 0.16)" : "transparent",
-              border: `1px solid ${cameraActive ? "rgba(198, 244, 50, 0.4)" : "transparent"}`,
-              color: cameraActive ? "#C6F432" : "#A1A1AA",
-              fontSize: 11.5,
-              fontWeight: 600,
-              cursor: "pointer",
-              transition: "all 0.15s ease",
-            }}
-          >
-            {cameraActive ? <Camera size={13} /> : <CameraOff size={13} />}
-            <span>{cameraLoading ? "Starting…" : cameraActive ? "AR Camera Live" : "Enable AR Camera"}</span>
-          </button>
-
-          {/* Gather Orbs Button */}
-          <button
-            data-dock-action="gather"
-            onClick={handleGatherOrbs}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "6px 12px",
-              borderRadius: 999,
-              background: "transparent",
-              border: "1px solid transparent",
-              color: "#D4D4D8",
-              fontSize: 11.5,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            <Magnet size={13} color="#C6F432" />
-            <span>Gather Orbs</span>
-          </button>
-
-          {/* Synth Sound Toggle */}
-          <button
-            data-dock-action="mute"
-            onClick={onToggleMute}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              padding: "6px 12px",
-              borderRadius: 999,
-              background: "transparent",
-              border: "1px solid transparent",
-              color: synthMuted ? "#71717A" : "#D4D4D8",
-              fontSize: 11.5,
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            {synthMuted ? <VolumeX size={13} /> : <Volume2 size={13} color="#C6F432" />}
-            <span>{synthMuted ? "Muted" : "Synth Sound"}</span>
-          </button>
-
-          {/* Compact Page Pager when nodes > 8 */}
-          {totalPages > 1 && (
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                paddingLeft: 8,
-                borderLeft: "1px solid rgba(255, 255, 255, 0.1)",
-              }}
-            >
-              <button
-                data-dock-action="pager-prev"
-                disabled={pageIndex === 0}
-                onClick={() => {
-                  synthRef.current.playTossWhoosh();
-                  setPageIndex((p) => Math.max(0, p - 1));
-                }}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: pageIndex === 0 ? "#52525B" : "#FAFAFA",
-                  cursor: pageIndex === 0 ? "default" : "pointer",
-                  display: "grid",
-                  placeItems: "center",
-                  padding: 2,
-                }}
-              >
-                <ChevronLeft size={14} />
-              </button>
-              <span
-                style={{
-                  fontSize: 10,
-                  fontFamily: "ui-monospace, monospace",
-                  color: "#A1A1AA",
-                  padding: "0 2px",
-                }}
-              >
-                {pageIndex + 1}/{totalPages}
-              </span>
-              <button
-                data-dock-action="pager-next"
-                disabled={pageIndex === totalPages - 1}
-                onClick={() => {
-                  synthRef.current.playTossWhoosh();
-                  setPageIndex((p) => Math.min(totalPages - 1, p + 1));
-                }}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: pageIndex === totalPages - 1 ? "#52525B" : "#FAFAFA",
-                  cursor: pageIndex === totalPages - 1 ? "default" : "pointer",
-                  display: "grid",
-                  placeItems: "center",
-                  padding: 2,
-                }}
-              >
-                <ChevronRight size={14} />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Dynamic Contextual Status Hint */}
-        <div
-          style={{
-            fontSize: 10.5,
-            color: "#8E8E93",
-            letterSpacing: 0.2,
-            fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-          }}
-        >
-          {activeQuizNode
-            ? "☝️✌️🤟🖖 Hold 1–4 fingers to answer · 🖐️ Palm safe · ✊ Fist tosses back · 👍 Thumbs up advances"
-            : "Pinch to grab & toss · Closer/farther for depth · Pull close or tap to quiz · Fist to summon"}
-        </div>
-      </div>
     </div>
   );
 }
