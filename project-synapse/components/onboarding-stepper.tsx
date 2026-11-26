@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, Bot, FileUp, Hand, Sprout } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bell, Bot, FileUp, Hand, Sprout } from "lucide-react";
 import { ElectricLogo } from "@/components/brand-logo";
 import { Stepper, type StepItem } from "@/components/motion/Stepper";
 import { StarBorder } from "@/components/motion/StarBorder";
+import { BellToggle } from "@/components/motion/BellToggle";
 import {
   DEFAULT_USER_PROFILE,
   STUDY_FIELDS,
@@ -42,6 +43,13 @@ const WIZARD_STEPS: StepItem[] = [
   },
   {
     number: "03",
+    title: "Alerts",
+    subtitle: "Decay Reminders",
+    detail: "",
+    badge: "Setup",
+  },
+  {
+    number: "04",
     title: "Launchpad",
     subtitle: "Start Mode",
     detail: "",
@@ -98,6 +106,10 @@ export function OnboardingStepper({
   const [preferredStart, setPreferredStart] = useState<PreferredStart>(
     DEFAULT_USER_PROFILE.preferredStart
   );
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(
+    false
+  );
+  const [notifStatusNote, setNotifStatusNote] = useState<string>("");
   const [runTour, setRunTour] = useState(true);
 
   useEffect(() => {
@@ -112,11 +124,50 @@ export function OnboardingStepper({
     setPreferredStart(
       initialProfile?.preferredStart || DEFAULT_USER_PROFILE.preferredStart
     );
+    const hasGranted =
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      Notification.permission === "granted";
+    setNotificationsEnabled(
+      Boolean(initialProfile?.notificationsEnabled) && hasGranted
+    );
+    setNotifStatusNote("");
     // Default tour ON for first-time setup, OFF when editing profile later
     setRunTour(!initialProfile?.onboardingCompleted);
   }, [open, initialProfile, defaultName]);
 
   if (!open) return null;
+
+  const handleRequestNotifications = async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotificationsEnabled(false);
+      setNotifStatusNote("Browser notifications are unavailable on this device.");
+      return;
+    }
+    if (notificationsEnabled) {
+      window.localStorage.setItem("synapsesonic_reminders", "false");
+      setNotificationsEnabled(false);
+      setNotifStatusNote("Reminders muted — you can enable them anytime.");
+      return;
+    }
+    try {
+      const perm =
+        Notification.permission === "granted"
+          ? "granted"
+          : await Notification.requestPermission();
+      if (perm === "granted") {
+        window.localStorage.setItem("synapsesonic_reminders", "true");
+        setNotificationsEnabled(true);
+        setNotifStatusNote("Study reminders enabled for fading concepts.");
+      } else {
+        window.localStorage.setItem("synapsesonic_reminders", "false");
+        setNotificationsEnabled(false);
+        setNotifStatusNote("Blocked in browser settings — in-app bell alerts stay active.");
+      }
+    } catch {
+      setNotifStatusNote("Could not request permission right now.");
+    }
+  };
 
   const handleFinish = () => {
     const cleanName = name.trim() || defaultName.trim() || "Learner";
@@ -126,6 +177,7 @@ export function OnboardingStepper({
       goal,
       tutorStyle,
       preferredStart,
+      notificationsEnabled,
       onboardingCompleted: true,
       tourCompleted: initialProfile?.tourCompleted ?? false,
     };
@@ -150,7 +202,7 @@ export function OnboardingStepper({
         <div className="px-6 pt-5 pb-4 border-b border-white/10 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-zinc-400">
-              Step {step + 1} of 3
+              Step {step + 1} of {WIZARD_STEPS.length}
             </span>
             <button
               type="button"
@@ -309,6 +361,61 @@ export function OnboardingStepper({
           )}
 
           {step === 2 && (
+            <div className="space-y-5 max-w-lg mx-auto">
+              <div>
+                <div className="text-[11px] font-mono uppercase tracking-[0.16em] text-[#C6F432] mb-1.5">
+                  AUTOMATED CALENDAR RETENTION
+                </div>
+                <h2 className="text-xl font-semibold text-white tracking-tight">
+                  Memory Decay Alerts
+                </h2>
+                <p className="text-xs sm:text-sm text-zinc-400 mt-1.5 leading-relaxed">
+                  SynapseSonic monitors elapsed days since your last review and nudges you right before a concept slips below 50% retention.
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-[#0B0B0C] border border-white/10 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <span className="w-10 h-10 rounded-xl bg-[#C6F432]/12 border border-[#C6F432]/30 grid place-items-center text-[#C6F432] shrink-0">
+                    <Bell className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <div className="text-sm font-semibold text-white">
+                      Smart Decay Reminders
+                    </div>
+                    <div className="text-xs text-zinc-400 mt-0.5">
+                      OS alert when any card fades below 50%
+                    </div>
+                  </div>
+                </div>
+
+                <BellToggle
+                  active={notificationsEnabled}
+                  onToggle={() => void handleRequestNotifications()}
+                  activeLabel="Alerts On"
+                  inactiveLabel="Muted"
+                />
+              </div>
+
+              {!notificationsEnabled && (
+                <button
+                  type="button"
+                  onClick={() => void handleRequestNotifications()}
+                  className="w-full py-2.5 px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-xs font-semibold text-white transition-colors cursor-pointer"
+                >
+                  Enable Browser Study Reminders →
+                </button>
+              )}
+
+              {notifStatusNote && (
+                <p className="text-xs text-[#C6F432] font-mono">
+                  {notifStatusNote}
+                </p>
+              )}
+            </div>
+          )}
+
+          {step === 3 && (
             <div className="space-y-5">
               <div>
                 <h2 className="text-xl font-semibold text-white tracking-tight">
@@ -400,10 +507,10 @@ export function OnboardingStepper({
             <div />
           )}
 
-          {step < 2 ? (
+          {step < WIZARD_STEPS.length - 1 ? (
             <button
               type="button"
-              onClick={() => setStep((s) => Math.min(2, s + 1))}
+              onClick={() => setStep((s) => Math.min(WIZARD_STEPS.length - 1, s + 1))}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#C6F432] text-[#0B0B0C] text-xs font-semibold hover:bg-[#d4f75c] transition-colors cursor-pointer"
             >
               <span>Continue</span>

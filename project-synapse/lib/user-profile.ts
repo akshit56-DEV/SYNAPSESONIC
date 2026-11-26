@@ -25,6 +25,7 @@ export interface UserStudyProfile {
   goal: StudyGoal;
   tutorStyle: TutorStyle;
   preferredStart: PreferredStart;
+  notificationsEnabled?: boolean;
   onboardingCompleted: boolean;
   tourCompleted: boolean;
 }
@@ -55,6 +56,7 @@ export const DEFAULT_USER_PROFILE: UserStudyProfile = {
   goal: "Build long-term recall",
   tutorStyle: "Analogy-First",
   preferredStart: "micu",
+  notificationsEnabled: false,
   onboardingCompleted: false,
   tourCompleted: false,
 };

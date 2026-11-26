@@ -16,6 +16,8 @@ import {
 import { BrandLogo } from "@/components/brand-logo";
 import { usePwaInstall } from "@/components/pwa-provider";
 import { ClickSpark } from "@/components/motion/ClickSpark";
+import { Aurora } from "@/components/motion/Aurora";
+import { GlareHover } from "@/components/motion/GlareHover";
 import { PillNav } from "@/components/motion/PillNav";
 import { WebThreads } from "@/components/motion/WebThreads";
 import { DecryptedText } from "@/components/motion/DecryptedText";
@@ -306,7 +308,16 @@ export default function LandingPage() {
 
         <main className="relative z-10 pt-28 sm:pt-32">
           {/* ── Asymmetric Spatial Hero ───────────────────────────────────── */}
-          <section className="max-w-6xl mx-auto px-5 sm:px-8 pt-6 pb-20">
+          <section className="relative overflow-hidden">
+            <Aurora
+              colorStops={["#C6F432", "#10B981", "#5227FF"]}
+              direction="top"
+              mouseInteraction={true}
+              blend={0.5}
+              amplitude={1.0}
+              dpr={2}
+            />
+            <div className="relative z-10 max-w-6xl mx-auto px-5 sm:px-8 pt-6 pb-20">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
               {/* Left Editorial Column */}
               <div className="lg:col-span-6 text-left">
@@ -332,15 +343,22 @@ export default function LandingPage() {
                 </p>
 
                 <div className="mt-8 flex flex-wrap items-center gap-3.5">
-                  <StarBorder color="#C6F432" speed="4.5s">
-                    <Link
-                      href={workspaceHref}
-                      className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#C6F432] text-[#0B0B0C] text-sm font-semibold hover:bg-[#d4f75c] transition-colors"
-                    >
-                      <span>Launch Workspace</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </Link>
-                  </StarBorder>
+                  <ClickSpark
+                    local={true}
+                    sparkColor="#C6F432"
+                    sparkCount={8}
+                    sparkRadius={26}
+                  >
+                    <StarBorder color="#C6F432" speed="4.5s">
+                      <Link
+                        href={workspaceHref}
+                        className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#C6F432] text-[#0B0B0C] text-sm font-semibold hover:bg-[#d4f75c] transition-colors"
+                      >
+                        <span>Launch Workspace</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    </StarBorder>
+                  </ClickSpark>
 
                   {canInstall && (
                     <button
@@ -359,6 +377,7 @@ export default function LandingPage() {
               <div className="lg:col-span-6">
                 <SpatialOrbStage />
               </div>
+            </div>
             </div>
           </section>
 
@@ -406,6 +425,7 @@ export default function LandingPage() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
               {/* Card 1 (7-col): Study Terrarium */}
               <ScrollReveal delayMs={40} className="lg:col-span-7">
+                <GlareHover className="h-full">
                 <div
                   onPointerMove={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
@@ -514,10 +534,12 @@ export default function LandingPage() {
                     </div>
                   </div>
                 </div>
+                </GlareHover>
               </ScrollReveal>
 
               {/* Card 2 (5-col): Learn with Micu */}
               <ScrollReveal delayMs={110} className="lg:col-span-5">
+                <GlareHover className="h-full">
                 <div className="h-full rounded-2xl bg-[#141416] border border-white/10 p-6 sm:p-7 flex flex-col justify-between gap-5">
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 rounded-2xl bg-[#0B0B0C] border border-white/15 flex items-center justify-center shrink-0 overflow-hidden">
@@ -554,10 +576,12 @@ export default function LandingPage() {
                     </p>
                   </div>
                 </div>
+                </GlareHover>
               </ScrollReveal>
 
               {/* Card 3 (Full 12-col): Gesture Synth */}
               <ScrollReveal delayMs={160} className="lg:col-span-12">
+                <GlareHover>
                 <div
                   onPointerMove={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
@@ -651,6 +675,7 @@ export default function LandingPage() {
                     </div>
                   </div>
                 </div>
+                </GlareHover>
               </ScrollReveal>
             </div>
           </section>

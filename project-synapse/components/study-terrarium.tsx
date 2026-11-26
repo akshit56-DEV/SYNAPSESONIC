@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import type { Concept } from "./decks";
 import { Particles } from "./motion/Particles";
+import { LatticeLoader } from "./motion/LatticeLoader";
+import { ClickSpark } from "./motion/ClickSpark";
 
 export type SynapseKind = "base" | "branch" | "forged";
 
@@ -2874,10 +2876,11 @@ export function StudyTerrarium({
                 gap: 10,
               }}
             >
-              <Sparkles size={20} color="#C6F432" className="animate-spin" />
-              <span style={{ fontSize: 13, color: "#A1A1AA" }}>
-                Synthesizing cognitive bridge…
-              </span>
+              <LatticeLoader
+                size={24}
+                color="#C6F432"
+                label="Synthesizing cognitive bridge…"
+              />
             </div>
           )}
 
@@ -3329,6 +3332,12 @@ export function StudyTerrarium({
                 {activeQuiz.question}
               </p>
 
+              <ClickSpark
+                local={true}
+                sparkColor="#C6F432"
+                sparkSize={8}
+                sparkRadius={18}
+              >
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 {activeQuiz.options.map((opt, oi) => {
                   const isSelected = inspectorQuizSelected === oi;
@@ -3389,6 +3398,7 @@ export function StudyTerrarium({
                   );
                 })}
               </div>
+              </ClickSpark>
 
               {inspectorQuizAnswered && (
                 <div

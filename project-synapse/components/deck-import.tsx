@@ -3,6 +3,7 @@ import { useRef, useEffect, useState } from "react";
 import { Upload, X, ArrowUpRight, Layers3, AlertCircle } from "lucide-react";
 import { makeDeck, samples, type Deck, type Concept } from "./decks";
 import ThoughtLine from "./ThoughtLine";
+import { LatticeLoader } from "./motion/LatticeLoader";
 import "./import.css";
 
 interface GroqConcept {
@@ -224,6 +225,7 @@ export function DeckImport({
             display: "flex",
             alignItems: "center",
             justifyContent: "flex-start",
+            gap: 16,
             padding: "24px 20px",
             margin: "21px 0",
             width: "100%",
@@ -234,6 +236,9 @@ export function DeckImport({
             overflowX: "hidden",
           }}
         >
+          {isProcessing && (
+            <LatticeLoader size={22} color="#C6F432" className="shrink-0" />
+          )}
           <ThoughtLine
             working={isProcessing}
             label="Building study deck…"

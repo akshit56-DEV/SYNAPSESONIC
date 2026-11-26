@@ -23,7 +23,6 @@ import {
   Sparkles,
   ArrowRight,
   BookOpen,
-  Bell,
   Download,
 } from "lucide-react";
 import { useRecall } from "./use-recall";
@@ -33,15 +32,17 @@ import { ARBubbleSpace } from "./ar-bubble-space";
 import { MicuTutorSpace } from "./micu-tutor-space";
 import { BrandLogo } from "./brand-logo";
 import { LatticeLoader } from "./motion/LatticeLoader";
+import { BellToggle } from "./motion/BellToggle";
+import { SwipeToast } from "./motion/SwipeToast";
 import { OnboardingStepper } from "./onboarding-stepper";
 import { WorkspaceTour } from "./workspace-tour";
 import { WorkspaceHelpModal } from "./workspace-help-modal";
 import { usePwaInstall } from "./pwa-provider";
+import { useDecayNotifications } from "@/lib/use-decay-notifications";
 import {
   makeDeck,
   samples,
   retentionAt,
-  elapsedDaysSince,
   type Concept,
 } from "./decks";
 import type {
@@ -247,12 +248,15 @@ export default function Workspace() {
     >("idle"),
     [accountMenuOpen, setAccountMenuOpen] = useState(false),
     [notifMenuOpen, setNotifMenuOpen] = useState(false),
-    [remindersEnabled, setRemindersEnabled] = useState(false),
     [studyProfile, setStudyProfile] = useState<UserStudyProfile | null>(null),
     [onboardingOpen, setOnboardingOpen] = useState(false),
     [tourActive, setTourActive] = useState(false),
     [helpOpen, setHelpOpen] = useState(false),
-    [toastMessage, setToastMessage] = useState<string | null>(null),
+    [toastState, setToastState] = useState<{
+      message: string;
+      actionLabel?: string;
+      onAction?: () => void;
+    } | null>(null),
     deckMenuRef = useRef<HTMLDivElement>(null),
     accountMenuRef = useRef<HTMLDivElement>(null),
     notifMenuRef = useRef<HTMLDivElement>(null),
@@ -273,16 +277,26 @@ export default function Workspace() {
   activeDeckIdRef.current = activeDeckId;
   userRef.current = user;
 
-  const showToast = useCallback((message: string) => {
-    setToastMessage(message);
-    if (toastTimerRef.current !== null) {
-      window.clearTimeout(toastTimerRef.current);
-    }
-    toastTimerRef.current = window.setTimeout(() => {
-      setToastMessage(null);
-      toastTimerRef.current = null;
-    }, 3200);
-  }, []);
+  const showToast = useCallback(
+    (
+      message: string,
+      options?: { actionLabel?: string; onAction?: () => void }
+    ) => {
+      setToastState({
+        message,
+        actionLabel: options?.actionLabel,
+        onAction: options?.onAction,
+      });
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current);
+      }
+      toastTimerRef.current = window.setTimeout(() => {
+        setToastState(null);
+        toastTimerRef.current = null;
+      }, 4200);
+    },
+    []
+  );
 
   useEffect(() => {
     return () => {
@@ -676,8 +690,9 @@ export default function Workspace() {
       r.load({ name: importedDeck.name, nodes: stampedNodes });
       setImporting(false);
       setView("studio");
+      showToast(`PDF ready · ${stampedNodes.length} concepts extracted`);
     },
-    [r]
+    [r, showToast]
   );
 
   // ── Shared Deck Callbacks for Cross-Tab Sync ────────────────────────────────
@@ -806,12 +821,14 @@ export default function Workspace() {
   const handleUpdateMastery = useCallback(
     (nodeId: string, newMastery: number) => {
       const now = Date.now();
+      const clamped = Math.max(0, Math.min(100, newMastery));
       const currentDeck = r.deck;
+      const prevNode = currentDeck.nodes.find((n) => n.id === nodeId);
       const updatedNodes = currentDeck.nodes.map((n) => {
         if (n.id === nodeId) {
           return {
             ...n,
-            retention: Math.max(0, Math.min(100, newMastery)),
+            retention: clamped,
             lastReviewed: now,
             lastReviewedAt: now,
             createdAt: n.createdAt ?? now,
@@ -821,8 +838,11 @@ export default function Workspace() {
         return n;
       });
       r.load({ ...currentDeck, nodes: updatedNodes });
+      if (prevNode && (prevNode.retention ?? 0) < 80 && clamped >= 80) {
+        showToast(`Mastery unlocked: ${prevNode.title} (${clamped}%)`);
+      }
     },
-    [r]
+    [r, showToast]
   );
 
   const handleSelectConcept = useCallback(
@@ -850,87 +870,40 @@ export default function Workspace() {
     });
   }, [r.nodes]);
 
-  const weakConcepts = useMemo(() => {
-    return deduplicatedNodes
-      .map((node, index) => {
-        const retention = r.values[index] ?? retentionAt(node, 0);
-        const daysElapsed = Math.floor(elapsedDaysSince(node));
-        return { node, index, retention, daysElapsed };
-      })
-      .filter((item) => item.retention < 50 || item.daysElapsed >= 1)
-      .sort((a, b) => a.retention - b.retention);
-  }, [deduplicatedNodes, r.values]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved =
-      window.localStorage.getItem("synapsesonic_reminders") === "true";
-    const granted =
-      "Notification" in window && Notification.permission === "granted";
-    setRemindersEnabled(saved && granted);
-  }, []);
-
-  useEffect(() => {
-    if (
-      !hasHydrated ||
-      !remindersEnabled ||
-      weakConcepts.length === 0 ||
-      typeof window === "undefined" ||
-      !("Notification" in window) ||
-      Notification.permission !== "granted"
-    ) {
-      return;
-    }
-    const todayKey = new Date().toISOString().slice(0, 10);
-    if (window.localStorage.getItem("synapsesonic_last_notif_day") === todayKey) {
-      return;
-    }
-    window.localStorage.setItem("synapsesonic_last_notif_day", todayKey);
-    try {
-      new Notification("SynapseSonic Memory Decay Alert", {
-        body: `${weakConcepts.length} concept${weakConcepts.length === 1 ? " is" : "s are"} fading — quick review ready.`,
-        icon: "/icon.svg",
-      });
-    } catch {
-      // Quiet fallback if Notification constructor blocked
-    }
-  }, [hasHydrated, remindersEnabled, weakConcepts.length]);
-
-  const handleToggleReminders = useCallback(async () => {
-    if (typeof window === "undefined" || !("Notification" in window)) {
-      showToast("Browser notifications are not supported on this device");
-      return;
-    }
-    if (remindersEnabled) {
-      window.localStorage.setItem("synapsesonic_reminders", "false");
-      setRemindersEnabled(false);
-      showToast("Browser reminders paused");
-      return;
-    }
-    try {
-      const perm =
-        Notification.permission === "granted"
-          ? "granted"
-          : await Notification.requestPermission();
-      if (perm === "granted") {
-        window.localStorage.setItem("synapsesonic_reminders", "true");
-        setRemindersEnabled(true);
-        showToast("Browser decay reminders enabled");
-        try {
-          new Notification("SynapseSonic Reminders Active", {
-            body: "We'll alert you when saved concepts need a quick recall check.",
-            icon: "/icon.svg",
-          });
-        } catch {}
-      } else {
-        window.localStorage.setItem("synapsesonic_reminders", "false");
-        setRemindersEnabled(false);
-        showToast("Allow notifications in browser settings for decay alerts");
-      }
-    } catch {
-      showToast("Unable to enable browser notifications");
-    }
-  }, [remindersEnabled, showToast]);
+  const {
+    weakConcepts,
+    remindersEnabled,
+    toggleReminders: handleToggleReminders,
+    sendTestAlert,
+  } = useDecayNotifications({
+    nodes: deduplicatedNodes,
+    values: r.values,
+    enabled: studyProfile?.notificationsEnabled,
+    onFocusConcept: (idx) => {
+      setNotifMenuOpen(false);
+      setView("studio");
+      synth.stop();
+      setMode(0);
+      r.focusNode(idx);
+    },
+    onInAppToast: (message, conceptIdx) => {
+      showToast(
+        message,
+        conceptIdx !== undefined
+          ? {
+              actionLabel: "Review",
+              onAction: () => {
+                setView("studio");
+                synth.stop();
+                setMode(0);
+                r.focusNode(conceptIdx);
+                setToastState(null);
+              },
+            }
+          : undefined
+      );
+    },
+  });
 
   // ── 5. Load Study Profile & Trigger First-Time Onboarding ─────────────────
   useEffect(() => {
@@ -1506,40 +1479,25 @@ export default function Workspace() {
             <HelpCircle size={15} />
           </button>
 
-          {/* ── Memory Decay Notification Bell ─────────────────────────── */}
+          {/* ── Memory Decay Notification BellToggle ───────────────────── */}
           {hasHydrated && (
             <div ref={notifMenuRef} className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => {
+              <BellToggle
+                compact
+                expanded={false}
+                active={remindersEnabled}
+                badgeCount={weakConcepts.length}
+                ariaLabel="Memory Decay Alerts"
+                onToggle={() => {
                   setAccountMenuOpen(false);
                   setDeckMenuOpen(false);
                   setNotifMenuOpen((v) => !v);
                 }}
-                title="Memory Decay Alerts"
-                aria-label="Memory Decay Alerts"
-                className="w-[30px] h-[30px] md:w-[34px] md:h-[34px] rounded-full relative grid place-items-center cursor-pointer transition-all shrink-0"
-                style={{
-                  background: "rgba(24, 24, 27, 0.9)",
-                  border: notifMenuOpen
-                    ? "1px solid rgba(198, 244, 50, 0.55)"
-                    : "1px solid rgba(255, 255, 255, 0.12)",
-                  color: weakConcepts.length > 0 ? "#FAFAFA" : "#A1A1AA",
-                }}
-              >
-                <Bell size={15} />
-                {weakConcepts.length > 0 && (
-                  <span
-                    className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-[#C6F432] text-[#0B0B0C] text-[10px] font-bold flex items-center justify-center leading-none shadow-[0_0_8px_rgba(198,244,50,0.6)]"
-                  >
-                    {weakConcepts.length > 9 ? "9+" : weakConcepts.length}
-                  </span>
-                )}
-              </button>
+              />
 
               {notifMenuOpen && (
                 <div
-                  className="fixed right-3 top-[60px] sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+8px)] w-[min(296px,calc(100vw-24px))] z-[90] rounded-2xl p-3 flex flex-col gap-2.5"
+                  className="fixed right-3 top-[60px] sm:absolute sm:left-auto sm:right-0 sm:top-[calc(100%+8px)] w-[min(308px,calc(100vw-24px))] z-[90] rounded-2xl p-3 flex flex-col gap-2.5"
                   style={{
                     background: "rgba(18, 18, 21, 0.97)",
                     backdropFilter: "blur(24px)",
@@ -1599,24 +1557,25 @@ export default function Workspace() {
                     )}
                   </div>
 
-                  <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2 px-1">
-                    <span className="text-[11px] text-zinc-300">
-                      Enable Browser Reminders
-                    </span>
+                  <div className="pt-2 border-t border-white/10 flex flex-col gap-2 px-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-zinc-300">
+                        Browser Reminders
+                      </span>
+                      <BellToggle
+                        compact
+                        active={remindersEnabled}
+                        activeLabel="Alerts On"
+                        inactiveLabel="Muted"
+                        onToggle={() => void handleToggleReminders()}
+                      />
+                    </div>
                     <button
                       type="button"
-                      role="switch"
-                      aria-checked={remindersEnabled}
-                      onClick={() => void handleToggleReminders()}
-                      className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer shrink-0 ${
-                        remindersEnabled ? "bg-[#C6F432]" : "bg-zinc-700"
-                      }`}
+                      onClick={() => void sendTestAlert()}
+                      className="w-full py-1.5 px-3 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-[11px] font-mono text-[#C6F432] transition-colors cursor-pointer"
                     >
-                      <span
-                        className={`block w-3.5 h-3.5 rounded-full bg-[#0B0B0C] transition-transform duration-150 ${
-                          remindersEnabled ? "translate-x-[18px]" : "translate-x-[3px]"
-                        }`}
-                      />
+                      Send Test Alert
                     </button>
                   </div>
                 </div>
@@ -2358,42 +2317,13 @@ export default function Workspace() {
         onEditProfile={() => setOnboardingOpen(true)}
       />
 
-      {toastMessage && (
-        <div
-          role="status"
-          aria-live="polite"
-          style={{
-            position: "fixed",
-            right: 20,
-            bottom: 20,
-            zIndex: 110,
-            pointerEvents: "none",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 9,
-            padding: "10px 14px",
-            borderRadius: 12,
-            background: "rgba(20, 20, 22, 0.94)",
-            backdropFilter: "blur(16px)",
-            border: "1px solid rgba(198, 244, 50, 0.38)",
-            boxShadow: "0 12px 32px rgba(0, 0, 0, 0.55)",
-            color: "#FAFAFA",
-            fontSize: 12.5,
-            fontWeight: 500,
-          }}
-        >
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: "#C6F432",
-              boxShadow: "0 0 8px #C6F432",
-              flexShrink: 0,
-            }}
-          />
-          <span>{toastMessage}</span>
-        </div>
+      {toastState && (
+        <SwipeToast
+          message={toastState.message}
+          actionLabel={toastState.actionLabel}
+          onAction={toastState.onAction}
+          onDismiss={() => setToastState(null)}
+        />
       )}
     </main>
   );

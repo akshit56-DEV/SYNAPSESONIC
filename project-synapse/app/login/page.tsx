@@ -132,7 +132,14 @@ export default function LoginPage() {
       duration={380}
     >
       <div className="min-h-screen bg-[#0B0B0C] text-zinc-100 flex flex-col items-center justify-center p-5 sm:p-6 relative overflow-hidden">
-        <Aurora />
+        <Aurora
+          colorStops={["#C6F432", "#10B981", "#5227FF"]}
+          direction="top"
+          mouseInteraction={true}
+          blend={0.5}
+          amplitude={1.0}
+          dpr={2}
+        />
 
         <Link
           href="/"

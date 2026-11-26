@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import dynamic from "next/dynamic";
 import type { Recall } from "./use-recall";
+import { VoicePill } from "./motion/VoicePill";
 
 // ── Dynamically import DotLottie (SSR-safe) ──────────────────────────────────
 const DotLottieReact = dynamic(
@@ -1388,16 +1389,26 @@ export function MicuTutorSpace({
                   </div>
                 </div>
 
-                {/* Ephemeral native dark-zinc status pill */}
+                {/* Voice Pill & Ephemeral native status pill */}
                 <div
                   style={{
-                    minHeight: 32,
+                    minHeight: 34,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
+                    gap: 8,
+                    flexWrap: "wrap",
                   }}
                 >
-                  {loadingTask && (
+                  {(tutorState === "listening" ||
+                    tutorState === "speaking" ||
+                    tutorState === "thinking") && (
+                    <VoicePill
+                      state={tutorState}
+                      volume={audioVolume}
+                    />
+                  )}
+                  {loadingTask && tutorState !== "listening" && tutorState !== "speaking" && (
                     <div
                       style={{
                         display: "inline-flex",

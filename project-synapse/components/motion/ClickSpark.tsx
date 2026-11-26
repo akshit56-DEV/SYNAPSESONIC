@@ -15,6 +15,8 @@ interface ClickSparkProps {
   sparkRadius?: number;
   sparkCount?: number;
   duration?: number;
+  local?: boolean;
+  className?: string;
   children: React.ReactNode;
 }
 
@@ -24,8 +26,11 @@ export function ClickSpark({
   sparkRadius = 22,
   sparkCount = 6,
   duration = 380,
+  local = false,
+  className = "",
   children,
 }: ClickSparkProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sparksRef = useRef<Spark[]>([]);
   const rafRef = useRef<number>(0);
@@ -37,10 +42,20 @@ export function ClickSpark({
     if (!ctx) return;
 
     const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      if (local && containerRef.current) {
+        canvas.width = containerRef.current.clientWidth || 100;
+        canvas.height = containerRef.current.clientHeight || 40;
+      } else {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
     };
     resize();
+    const ro =
+      local && containerRef.current && typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(resize)
+        : null;
+    if (local && containerRef.current) ro?.observe(containerRef.current);
     window.addEventListener("resize", resize);
 
     const tick = (now: number) => {
@@ -81,18 +96,25 @@ export function ClickSpark({
       }
     };
 
-    const handlePointerDown = (e: PointerEvent) => {
+    const spawnSparks = (clientX: number, clientY: number) => {
       if (
         typeof window !== "undefined" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches
       ) {
         return;
       }
+      let x = clientX;
+      let y = clientY;
+      if (local && containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        x = clientX - rect.left;
+        y = clientY - rect.top;
+      }
       const now = performance.now();
       for (let i = 0; i < sparkCount; i++) {
         sparksRef.current.push({
-          x: e.clientX,
-          y: e.clientY,
+          x,
+          y,
           angle: (2 * Math.PI * i) / sparkCount,
           startTime: now,
         });
@@ -102,13 +124,34 @@ export function ClickSpark({
       }
     };
 
-    window.addEventListener("pointerdown", handlePointerDown);
+    const targetEl: Window | HTMLDivElement =
+      local && containerRef.current ? containerRef.current : window;
+    const handlePointerDown = (e: Event) => {
+      const pe = e as PointerEvent;
+      spawnSparks(pe.clientX, pe.clientY);
+    };
+
+    targetEl.addEventListener("pointerdown", handlePointerDown);
     return () => {
+      ro?.disconnect();
       window.removeEventListener("resize", resize);
-      window.removeEventListener("pointerdown", handlePointerDown);
+      targetEl.removeEventListener("pointerdown", handlePointerDown);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [sparkColor, sparkCount, sparkRadius, sparkSize, duration]);
+  }, [sparkColor, sparkCount, sparkRadius, sparkSize, duration, local]);
+
+  if (local) {
+    return (
+      <div ref={containerRef} className={`relative ${className}`}>
+        <canvas
+          ref={canvasRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 z-50"
+        />
+        {children}
+      </div>
+    );
+  }
 
   return (
     <>
